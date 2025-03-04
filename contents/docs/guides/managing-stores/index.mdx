@@ -1,0 +1,57 @@
+---
+title: Managing Stores
+description: How to create and manage stores in QuantaJS.
+---
+
+# Managing Stores
+
+The `createStore` function is the core of QuantaJS, providing a structured way to manage state, getters, and actions.
+
+## Creating a Store
+
+```javascript
+import { createStore } from "quantajs";
+
+const counter = createStore({
+  state: { count: 0 },
+  getters: {
+    isPositive: (state) => state.count > 0,
+  },
+  actions: {
+    increment() {
+      this.count++;
+    },
+  },
+});
+
+console.log(counter.count); // 0
+counter.increment();
+console.log(counter.count); // 1
+console.log(counter.isPositive); // true
+```
+
+## Flattened Access
+
+Stores flatten state, getters, and actions into a single interface: 
+
+```javascript
+counter.count = 5; // Direct state mutation
+console.log(counter.isPositive); // true
+```
+
+## Store Registry
+
+Stores are registered by name to prevent duplicates:
+
+```javascript
+import { useStore } from "quantajs";
+
+const store = createStore("myStore", {
+  state: { value: "hello" },
+});
+
+const retrieved = useStore("myStore");
+console.log(retrieved.value); // "hello"
+```
+
+<Callout type="warning"> Attempting to create a store with an existing name throws an error. </Callout>

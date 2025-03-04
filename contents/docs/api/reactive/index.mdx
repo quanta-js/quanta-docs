@@ -1,0 +1,29 @@
+---
+title: reactive
+description: API reference for the reactive function.
+---
+
+# `reactive`
+
+Creates a reactive proxy for an object, enabling automatic dependency tracking.
+
+## Signature
+
+```typescript
+function reactive<T>(target: T): T;
+```
+
+## Parameters
+
+- `target`: The object to make reactive (e.g., plain object, Map, Set).
+
+## Returns
+
+A `reactive` version of the target object.
+
+## Example
+
+```javascript
+const state = reactive({ count: 0 });
+state.count = 1; // Triggers reactivity
+```

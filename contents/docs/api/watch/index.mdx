@@ -1,0 +1,28 @@
+---
+title: watch
+description: API reference for the watch function.
+---
+
+# `watch`
+
+Watches a reactive source and runs a callback on changes.
+
+## Signature
+
+```typescript
+function watch<T>(source: () => T, callback: (value: T) => void): void;
+```
+
+## Parameters
+
+- `source`: A function returning the value to watch.
+- `callback`: A function called with the new value when the source changes.
+
+## Example
+
+```javascript
+const state = reactive({ count: 0 });
+watch(() => state.count, (value) => console.log(value));
+state.count = 1; // Logs: 1
+state.count = 2; // Logs: 2
+```

@@ -1,0 +1,42 @@
+---
+title: createStore
+description: API reference for the createStore function.
+---
+
+# `createStore`
+
+Creates a reactive store with state, getters, and actions.
+
+## Signature
+
+```typescript
+function createStore<S, G, A>(
+  name: string,
+  options: {
+    state: () => S;
+    getters?: { [K in keyof G]: (state: S) => G[K] };
+    actions?: { [K in keyof A]: (this: StoreInstance<S, G, A>, ...args: any[]) => any };
+  }
+): StoreInstance<S, G, A>;
+```
+
+## Parameters
+- `name`: A unique string identifier for the store.
+- `options`:
+  - `state`: A function returning the initial state object.
+  - `getters` (optional): An object of getter functions.
+  - `actions` (optional): An object of action methods.
+
+## Returns
+
+A `StoreInstance` with flattened access to state, getters, and actions.
+
+## Example
+
+```javascript
+const store = createStore("counter", {
+  state: () => ({ count: 0 }),
+  getters: { doubled: (state) => state.count * 2 },
+  actions: { increment() { this.count++; } },
+});
+```

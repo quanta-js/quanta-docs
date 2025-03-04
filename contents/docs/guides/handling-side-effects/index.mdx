@@ -1,0 +1,48 @@
+---
+title: Handling Side Effects
+description: Managing asynchronous actions and side effects in QuantaJS.
+---
+
+# Handling Side Effects
+
+QuantaJS makes it easy to handle side effects like async operations within store actions.
+
+## Async Actions
+
+Add async logic to actions:
+
+```javascript
+import { createStore } from "quantajs";
+
+const userStore = createStore({
+  state: { user: null, loading: false },
+  actions: {
+    async fetchUser(id) {
+      this.loading = true;
+      const response = await fetch(`https://api.example.com/users/${id}`);
+      this.user = await response.json();
+      this.loading = false;
+    },
+  },
+});
+
+userStore.fetchUser(1);
+```
+
+## Batching Effects
+
+Use `batchEffects` to optimize updates:
+
+```javascript
+import { batchEffects } from "quantajs";
+
+batchEffects(() => {
+  userStore.loading = true;
+  userStore.user = null;
+  // Multiple updates batched into one
+});
+```
+
+## Learn More
+
+- Explore [reactive state](/docs/guides/reactive-state) for more reactivity details.

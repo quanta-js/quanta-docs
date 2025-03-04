@@ -1,0 +1,59 @@
+---
+title: Computed Values
+description: How to create computed properties with QuantaJS.
+---
+
+# Computed Values
+
+The `computed` function creates reactive computed properties that automatically update when their dependencies change.
+
+## Basic Usage
+
+```javascript
+import { reactive, computed } from "quantajs";
+
+const state = reactive({ count: 1 });
+const doubled = computed(() => state.count * 2);
+
+console.log(doubled.value); // 2
+state.count = 3;
+console.log(doubled.value); // 6
+```
+
+## Lazy Evaluation
+
+Computed values are lazily evaluated and cached until their dependencies change:
+
+```javascript
+const expensiveCalc = computed(() => {
+  console.log("Calculating...");
+  return state.count * 100;
+});
+
+console.log(expensiveCalc.value); // "Calculating..." then 300
+console.log(expensiveCalc.value); // 300 (cached, no recalculation)
+state.count = 4;
+console.log(expensiveCalc.value); // "Calculating..." then 400
+```
+
+## With Stores
+
+Computed values integrate seamlessly with createStore:
+
+```javascript
+import { createStore } from "quantajs";
+
+const store = createStore({
+  state: { count: 1 },
+  getters: {
+    doubled: (state) => state.count * 2,
+  },
+});
+
+console.log(store.doubled); // 2
+store.count = 3;
+console.log(store.doubled); // 6
+```
+
+## Learn More
+- Track changes with [watch](/docs/guides/waching-state).

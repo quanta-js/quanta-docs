@@ -1,0 +1,44 @@
+---
+title: Watching State
+description: How to watch state changes in QuantaJS.
+---
+
+# Watching State
+
+The `watch` function lets you observe reactive state changes and run a callback when they occur.
+
+## Basic Usage
+
+```javascript
+import { reactive, watch } from "quantajs";
+
+const state = reactive({ count: 0 });
+
+watch(
+  () => state.count,
+  (newValue) => console.log(`Count changed to: ${newValue}`),
+);
+
+state.count = 1; // Logs: "Count changed to: 1"
+state.count = 2; // Logs: "Count changed to: 2"
+```
+
+## Watching Complex State
+
+You can watch derived values:
+
+```javascript
+const state = reactive({ a: 1, b: 2 });
+
+watch(
+  () => state.a + state.b,
+  (sum) => console.log(`Sum is now: ${sum}`),
+);
+
+state.a = 3; // Logs: "Sum is now: 5"
+state.b = 4; // Logs: "Sum is now: 7"
+```
+
+## Learn More
+
+- Combine with [computed](/docs/guides/computed-values) for reactive derivations.

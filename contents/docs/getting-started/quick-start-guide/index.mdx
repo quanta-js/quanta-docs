@@ -1,0 +1,50 @@
+---
+title: Quick Start
+description: A simple example to get started with QuantaJS.
+---
+
+# Quick Start
+
+Let’s jump into using QuantaJS with a simple counter example.
+
+## Example: Counter Store
+
+Here’s how to create a reactive counter using `createStore`:
+
+```javascript
+import { createStore } from "quantajs";
+
+const counter = createStore({
+  state: { count: 0 },
+  actions: {
+    increment() {
+      this.count++;
+    },
+    decrement() {
+      this.count--;
+    },
+  },
+});
+
+// Access state
+console.log(counter.count); // 0
+
+// Update state
+counter.increment();
+console.log(counter.count); // 1
+
+counter.decrement();
+console.log(counter.count); // 0
+```
+
+## What’s Happening?
+- `createStore` creates a reactive store with a `state` object and `actions`.
+- The `state` is made reactive, so changes trigger updates automatically.
+- Actions like `increment` and `decrement` modify the state directly using `this`.
+
+## Next Steps
+### Explore more features:
+
+- [Reactive State](/docs/guides/reactive-state)
+- [Computed Values](/docs/guides/computed-values)
+- [Watching State](/docs/guides/watching-state)

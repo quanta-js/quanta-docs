@@ -1,0 +1,56 @@
+---
+title: Reactive State
+description: Learn how to use QuantaJS's reactive state system.
+---
+
+# Reactive State
+
+QuantaJS provides a powerful reactivity system via the `reactive` function, allowing you to create state that automatically updates dependent computations.
+
+## Creating Reactive State
+
+Use the `reactive` function to make an object reactive:
+
+```javascript
+import { reactive } from "quantajs";
+
+const state = reactive({
+  count: 0,
+  name: "Quanta",
+});
+
+state.count++; // Updates are tracked automatically
+console.log(state.count); // 1
+```
+
+## Nested Reactivity
+
+Nested objects are also reactive:
+
+```javascript
+const state = reactive({
+  user: { name: "Alice", age: 25 },
+});
+
+state.user.age = 26; // Nested property is reactive
+console.log(state.user.age); // 26
+```
+
+## Reactive State with Collections (Map/Set) 
+
+QuantaJS supports reactive Map and Set:
+
+```javascript
+const map = reactive(new Map([["key", "value"]]));
+map.set("newKey", "newValue");
+console.log(map.get("newKey")); // "newValue"
+
+const set = reactive(new Set([1, 2, 3]));
+set.add(4);
+console.log(set.size); // 4
+```
+
+## Learn More
+
+- Use [computed](/docs/guides/computed-values) for derived state.
+- Monitor changes with [watch](/docs/guides/watching-state).
