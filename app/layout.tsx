@@ -21,7 +21,7 @@ const monoFont = Space_Mono({
 
 export const metadata: Metadata = {
   title: "QuantaJS Documentation",
-  metadataBase: new URL("https://quanta.vercel.app/"),
+  metadataBase: new URL("https://quantajs.com/"),
   description:
     "A compact, scalable, and developer-friendly state management library designed for any JavaScript environment. It includes a reactivity system that enables efficient and flexible data handling, making complex state management easy.",
 };
