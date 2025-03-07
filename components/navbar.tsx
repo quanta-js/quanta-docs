@@ -31,7 +31,7 @@ export const NAVLINKS = [
   // },
   {
     title: "Community",
-    href: "https://github.com/quanta-js/quanta/discussions",
+    href: "https://github.com/orgs/quanta-js/discussions",
   },
 ];
 
