@@ -10,7 +10,7 @@ export default function LogoComponent() {
         <Link href="/" className="flex items-center gap-2.5">
             <Image
                 src={resolvedTheme == 'dark' ? "/img/quantajs_dark.png" : '/img/quantajs_light.png'}
-                alt="QuantaJS Logo"
+                alt="QuantaJS logo for JavaScript library"
                 width={200}
                 height={100}
             />
