@@ -28,8 +28,12 @@
     --docsearch-footer-shadow: none !important;
 }
 
+.DocSearch-Form {
+    @apply bg-qblack
+}
+
 .DocSearch-Modal {
-    @apply sm:mt-20
+    @apply sm:mt-20 bg-qblack
 }
 
 .DocSearch-Button {
@@ -41,7 +45,7 @@
 }
 
 .DocSearch-Search-Icon {
-    @apply w-4 h-4 text-muted-foreground !important
+    @apply w-4 h-4 text-muted-foreground bg-qblack !important
 }
 
 .DocSearch-Button-Keys {
@@ -53,11 +57,11 @@
 }
 
 .DocSearch-Input {
-    @apply text-[15px] !important
+    @apply text-[15px] bg-qblack !important
 }
 
 .DocSearch-SearchBar {
-    @apply border-b pb-0.5 pt-0.5
+    @apply border-b bg-qblack pb-0.5 pt-0.5
 }
 
 .DocSearch-Cancel {

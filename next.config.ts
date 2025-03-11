@@ -12,6 +12,7 @@ const nextConfig: NextConfig = {
     ],
   },
   transpilePackages: ["next-mdx-remote"],
+  trailingSlash: false
 };
 
 export default nextConfig;
