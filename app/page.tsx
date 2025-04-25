@@ -1,5 +1,6 @@
 import { buttonVariants } from "@/components/ui/button";
 import CommandCopy from "@/components/ui/CommandCopy";
+import { Cover } from "@/components/ui/cover";
 import { page_routes } from "@/lib/routes-config";
 import { MoveUpRightIcon } from "lucide-react";
 import Link from "next/link";
@@ -17,7 +18,11 @@ export default function Home() {
         <MoveUpRightIcon className="w-4 h-4 font-extrabold" />
       </Link>
       <h1 className="text-[2.4rem] leading-10 sm:leading-[4.5rem] font-jura-bold mb-4 sm:text-6xl text-left sm:text-center">
-        Effortlessly manage state in any JavaScript project with <span className="text-qteal">QuantaJS</span> and its powerful reactivity system.
+        Effortlessly manage state in any JavaScript project with
+        <Cover className="mx-2">
+          <span className="text-qteal font-jura-bold">QuantaJS</span>
+        </Cover>
+        and its powerful reactivity system.
       </h1>
       <p className="mb-8 sm:text-lg max-w-[800px] text-muted-foreground font-jura-light text-left sm:text-center text-qgray">
         This lightweight, scalable state management library, built for modern JavaScript environments, offers an intuitive API and flexible reactivity, perfect for projects of any size—currently in beta and evolving fast!

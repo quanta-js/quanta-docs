@@ -67,6 +67,7 @@ export function Navbar() {
                   variant: "ghost",
                   size: "icon",
                 })}
+                area-label="GitHub"
               >
                 <GithubIcon className="h-[1.1rem] w-[1.1rem]" />
               </Link>
@@ -77,6 +78,7 @@ export function Navbar() {
                   variant: "ghost",
                   size: "icon",
                 })}
+                area-label="NPM"
               >
                 <svg  className="h-[1.1rem] w-[1.1rem] grayscale" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2500 2500" width="2500" height="2500"><path d="M0 0h2500v2500H0z" fill="#c00" /><path d="M1241.5 268.5h-973v1962.9h972.9V763.5h495v1467.9h495V268.5z" fill="#fff" /></svg>
               </Link>
