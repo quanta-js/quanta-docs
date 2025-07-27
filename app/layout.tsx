@@ -3,6 +3,7 @@ import { ThemeProvider } from "@/components/contexts/theme-provider";
 import { Navbar } from "@/components/navbar";
 import { Space_Mono, Space_Grotesk } from "next/font/google";
 import { Footer } from "@/components/footer";
+import Script from "next/script";
 import "@/styles/globals.css";
 
 const sansFont = Space_Grotesk({
@@ -19,7 +20,7 @@ const monoFont = Space_Mono({
   weight: "400",
 });
 
-export const viewPort:Viewport = {
+export const viewPort: Viewport = {
   width: "device-width",
   initialScale: 1.0,
 };
@@ -89,6 +90,19 @@ export default function RootLayout({
           type="text/css"
           href="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/devicon.min.css"
         />
+        <Script async src="https://www.googletagmanager.com/gtag/js?id=G-4GEBP7TVSV"></Script>
+        <Script
+          id="google-analytics"
+          strategy="afterInteractive"
+        >
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+
+            gtag('config', 'G-4GEBP7TVSV');
+          `}
+        </Script>
       </head>
       <body
         className={`${sansFont.variable} ${monoFont.variable} font-regular antialiased tracking-wide`}
