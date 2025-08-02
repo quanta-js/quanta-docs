@@ -73,7 +73,7 @@ export function Navbar() {
               </Link>
               {/* link btn for npm */}
               <Link
-                href="https://www.npmjs.com/package/quantajs"
+                href="https://www.npmjs.com/package/@quantajs/core"
                 className={buttonVariants({
                   variant: "ghost",
                   size: "icon",

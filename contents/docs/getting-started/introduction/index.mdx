@@ -5,41 +5,96 @@ description: Discover QuantaJS - the state management library that redefines sim
 
 # Introduction to QuantaJS
 
-Imagine a world where state management in JavaScript feels like a breeze—intuitive, lightweight, and endlessly scalable. Welcome to **QuantaJS**, the state management library that’s here to transform how you build applications. Whether you’re crafting a quick prototype or architecting a sprawling enterprise app, QuantaJS delivers a reactivity system so elegant, you’ll wonder how you ever lived without it.
+Imagine a world where state management in JavaScript feels like a breeze intuitive, lightweight, and endlessly scalable. Welcome to **QuantaJS**, the state management library that's here to transform how you build applications. Whether you're crafting a quick prototype or architecting a sprawling enterprise app, QuantaJS delivers a reactivity system so elegant, you'll wonder how you ever lived without it.
 
 <Callout type="info">
-QuantaJS is in beta (v1.0.0-beta.5) join us on this exciting journey and shape its future!
+QuantaJS is now available as two packages: @quantajs/core for framework-agnostic state management and @quantajs/react for React integration.
 </Callout>
+
+## The Story Behind QuantaJS
+
+QuantaJS was born from a simple yet powerful realization: the reactivity system that makes Vue.js and Pinia so delightful shouldn't be confined to just the Vue ecosystem. We wanted to bring that same intuitive, performant state management experience to the broader JavaScript world.
+
+If you've ever worked with Pinia, you'll immediately feel at home with QuantaJS. The familiar patterns stores with state, getters, and actions are all there, but now they work anywhere JavaScript runs. Whether you're building a React app, a vanilla JavaScript project, or exploring other frameworks, you can enjoy the same reactive magic that makes Vue development so enjoyable.
+
+The goal was simple: take the best parts of modern state management (reactive state, computed values, automatic dependency tracking) and make them accessible to everyone, regardless of their framework choice. We started with React integration because it's where many developers spend their time, but the vision extends far beyond that.
 
 ## Why QuantaJS Will Steal Your Heart
 
-- **Freedom Unleashed**: Works anywhere JavaScript does—vanilla, React, Vue, or beyond. No framework? No problem.
+- **Freedom Unleashed**: Works anywhere JavaScript does vanilla, React, Vue, or beyond. No framework? No problem.
 - **Reactivity Redefined**: Say goodbye to clunky boilerplate. Our reactive magic tracks changes effortlessly, from simple counters to complex nested maps.
-- **Scales Like a Dream**: Tiny scripts or massive systems—QuantaJS grows with you, never weighing you down.
+- **Scales Like a Dream**: Tiny scripts or massive systems QuantaJS grows with you, never weighing you down.
 - **Side Effects, Sorted**: Async actions feel natural, not forced. Fetch data, update state, and watch it flow.
-- **API That Clicks**: Learn it in minutes, master it in hours—coding with QuantaJS feels like second nature.
+- **API That Clicks**: Learn it in minutes, master it in hours coding with QuantaJS feels like second nature.
+- **React Optimized**: Built-in React integration with hooks and components for seamless React development.
 
 QuantaJS combines simplicity with power, offering a lightweight alternative to traditional state management libraries. Whether you're building a small prototype or a large-scale app, QuantaJS adapts to your needs without unnecessary complexity.
 
+## Package Structure
+
+QuantaJS is now split into two focused packages:
+
+### @quantajs/core
+The core state management library with reactivity system, perfect for any JavaScript environment.
+
+```javascript
+import { createStore, reactive, computed, watch } from '@quantajs/core';
+```
+
+### @quantajs/react
+React integration with hooks and components for seamless React development.
+
+```javascript
+import { useQuantaStore, QuantaProvider, useStore } from '@quantajs/react';
+```
 
 ## The Spark That Started It All
 
-QuantaJS isn’t just another library—it’s a rebellion against bloated, overcomplicated state management. Born from a desire to simplify without sacrificing power, it’s your companion for building smarter, faster, and cleaner code. And since it’s in beta, you’re not just a user—you’re a pioneer, helping us polish this gem into something legendary.
+QuantaJS isn't just another library it's a rebellion against bloated, overcomplicated state management. Born from a desire to simplify without sacrificing power, it's your companion for building smarter, faster, and cleaner code. With the new package structure, you get exactly what you need core functionality for any environment and React-specific features when building React applications.
 
 ## A Taste of the Magic
 
-Here’s a sneak peek at what QuantaJS can do:
+Here's a sneak peek at what QuantaJS can do:
 
+### Core Usage
 ```javascript
-import { createStore } from "quantajs";
+import { createStore } from '@quantajs/core';
 
-const counter = createStore({
-  state: { count: 0 },
+const counter = createStore('counter', {
+  state: () => ({ count: 0 }),
   actions: { increment() { this.count++; } },
 });
 
 counter.increment(); // Boom! State updates, reactivity kicks in.
-console.log(counter.count); // 1—simple, yet powerful.
+console.log(counter.count); // 1 simple, yet powerful.
+```
+
+### React Integration
+```javascript
+import { createStore, QuantaProvider, useStore } from '@quantajs/react';
+
+const counterStore = createStore('counter', {
+  state: () => ({ count: 0 }),
+  actions: { increment() { this.count++; } },
+});
+
+function Counter() {
+  const store = useStore();
+  return (
+    <div>
+      <p>Count: {store.count}</p>
+      <button onClick={() => store.increment()}>Increment</button>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <QuantaProvider store={counterStore}>
+      <Counter />
+    </QuantaProvider>
+  );
+}
 ```
 
 ## Get Started

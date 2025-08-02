@@ -6,7 +6,7 @@ description: API reference for the watch function.
 # Watch
 ## `watch`
 
-Watches a reactive source and runs a callback on changes.
+Watches for changes in reactive state and executes a callback when changes occur.
 
 ## Signature
 
@@ -16,14 +16,375 @@ function watch<T>(source: () => T, callback: (value: T) => void): void;
 
 ## Parameters
 
-- `source`: A function returning the value to watch.
-- `callback`: A function called with the new value when the source changes.
+- `source`: A function that returns the value to watch. This function is automatically tracked for dependencies.
+- `callback`: A function that executes when the watched value changes. Receives the new value as a parameter.
 
-## Example
+## Returns
+
+`void` - The watch function doesn't return anything.
+
+## Basic Usage
 
 ```javascript
-const state = reactive({ count: 0 });
-watch(() => state.count, (value) => console.log(value));
-state.count = 1; // Logs: 1
-state.count = 2; // Logs: 2
+import { reactive, watch } from '@quantajs/core';
+
+const state = reactive({
+  count: 0,
+  name: 'Quanta',
+});
+
+// Watch a single value
+watch(() => state.count, (newValue) => {
+  console.log(`Count changed to: ${newValue}`);
+});
+
+// Watch another value
+watch(() => state.name, (newValue) => {
+  console.log(`Name changed to: ${newValue}`);
+});
+
+state.count = 5; // Logs: "Count changed to: 5"
+state.name = 'QuantaJS'; // Logs: "Name changed to: QuantaJS"
 ```
+
+## Watching Multiple Values
+
+Watch multiple reactive values in a single watcher:
+
+```javascript
+const user = reactive({
+  firstName: 'John',
+  lastName: 'Doe',
+  age: 25,
+});
+
+// Watch computed values
+watch(() => `${user.firstName} ${user.lastName}`, (fullName) => {
+  console.log(`Full name changed to: ${fullName}`);
+});
+
+// Watch derived values
+watch(() => user.age >= 18, (isAdult) => {
+  console.log(`User is now ${isAdult ? 'an adult' : 'a minor'}`);
+});
+
+// Watch multiple properties
+watch(() => ({
+  name: `${user.firstName} ${user.lastName}`,
+  age: user.age,
+  isAdult: user.age >= 18,
+}), (userInfo) => {
+  console.log('User info updated:', userInfo);
+});
+
+user.firstName = 'Jane'; // Triggers multiple watchers
+user.age = 16; // Triggers age-related watchers
+```
+
+## Watching Store State
+
+Watch for changes in store state:
+
+```javascript
+import { createStore } from '@quantajs/core';
+
+const todoStore = createStore('todos', {
+  state: () => ({
+    todos: [],
+    filter: 'all',
+  }),
+  actions: {
+    addTodo(text) {
+      this.todos.push({ id: Date.now(), text, done: false });
+    },
+    setFilter(filter) {
+      this.filter = filter;
+    },
+  },
+});
+
+// Watch the entire todos array
+watch(() => todoStore.todos, (newTodos) => {
+  console.log(`Todos updated: ${newTodos.length} items`);
+  localStorage.setItem('todos', JSON.stringify(newTodos));
+});
+
+// Watch specific computed values
+watch(() => todoStore.todos.filter(t => t.done).length, (completedCount) => {
+  console.log(`${completedCount} todos completed`);
+});
+
+// Watch filter changes
+watch(() => todoStore.filter, (newFilter) => {
+  console.log(`Filter changed to: ${newFilter}`);
+});
+
+todoStore.addTodo('Learn QuantaJS');
+todoStore.addTodo('Build an app');
+todoStore.setFilter('active');
+```
+
+## Side Effects with Watch
+
+Use watch for common side effects like API calls, DOM updates, and logging:
+
+```javascript
+const userStore = createStore('user', {
+  state: () => ({
+    user: null,
+    isLoading: false,
+    userId: null,
+  }),
+  actions: {
+    setUserId(id) {
+      this.userId = id;
+    },
+  },
+});
+
+// Watch for user ID changes and fetch user data
+watch(() => userStore.userId, async (userId) => {
+  if (userId) {
+    userStore.isLoading = true;
+    try {
+      const response = await fetch(`/api/users/${userId}`);
+      userStore.user = await response.json();
+    } catch (error) {
+      console.error('Failed to fetch user:', error);
+    } finally {
+      userStore.isLoading = false;
+    }
+  } else {
+    userStore.user = null;
+  }
+});
+
+// Watch for user changes and update page title
+watch(() => userStore.user?.name, (userName) => {
+  if (userName) {
+    document.title = `Profile - ${userName}`;
+  } else {
+    document.title = 'User Profile';
+  }
+});
+
+// Watch for loading state changes
+watch(() => userStore.isLoading, (isLoading) => {
+  const spinner = document.getElementById('spinner');
+  if (spinner) {
+    spinner.style.display = isLoading ? 'block' : 'none';
+  }
+});
+
+// Watch for authentication state
+watch(() => !!userStore.user, (isAuthenticated) => {
+  if (isAuthenticated) {
+    console.log('User authenticated, redirecting to dashboard');
+    // router.push('/dashboard');
+  } else {
+    console.log('User logged out, redirecting to login');
+    // router.push('/login');
+  }
+});
+
+userStore.setUserId(123); // Triggers user fetch
+```
+
+## Watching Nested Objects
+
+Watch deeply nested object changes:
+
+```javascript
+const settings = reactive({
+  theme: {
+    mode: 'dark',
+    colors: {
+      primary: '#007bff',
+      secondary: '#6c757d',
+    },
+  },
+  notifications: {
+    email: true,
+    push: false,
+  },
+});
+
+// Watch specific nested properties
+watch(() => settings.theme.mode, (newMode) => {
+  document.body.setAttribute('data-theme', newMode);
+});
+
+// Watch multiple nested properties
+watch(() => ({
+  mode: settings.theme.mode,
+  primary: settings.theme.colors.primary,
+}), (newSettings) => {
+  console.log('Theme settings changed:', newSettings);
+});
+
+// Watch entire nested objects
+watch(() => settings.notifications, (newNotifications) => {
+  console.log('Notification settings updated:', newNotifications);
+});
+
+settings.theme.mode = 'light';
+settings.theme.colors.primary = '#28a745';
+settings.notifications.push = true;
+```
+
+## Performance Considerations
+
+Watch can be expensive for large objects. Use specific selectors when possible:
+
+```javascript
+const largeStore = createStore('large', {
+  state: () => ({
+    items: Array.from({ length: 1000 }, (_, i) => ({ id: i, value: Math.random() })),
+    metadata: { /* large object */ },
+  }),
+});
+
+// Good: Watch specific values
+watch(() => largeStore.items.length, (count) => {
+  console.log(`Item count: ${count}`);
+});
+
+// Avoid: Watching entire large objects
+// watch(() => largeStore.items, (items) => { ... }); // Expensive!
+
+// Good: Watch computed summaries
+watch(() => largeStore.items.filter(item => item.value > 0.5).length, (count) => {
+  console.log(`${count} items above threshold`);
+});
+
+// Good: Watch specific properties
+watch(() => largeStore.metadata.lastUpdated, (timestamp) => {
+  console.log(`Last updated: ${timestamp}`);
+});
+```
+
+## Common Use Cases
+
+### Form Validation
+
+```javascript
+const form = reactive({
+  email: '',
+  password: '',
+  confirmPassword: '',
+});
+
+// Watch for email changes and validate
+watch(() => form.email, (email) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const isValid = emailRegex.test(email);
+  
+  if (!isValid && email) {
+    console.log('Invalid email format');
+  }
+});
+
+// Watch for password confirmation
+watch(() => [form.password, form.confirmPassword], ([password, confirmPassword]) => {
+  if (password && confirmPassword && password !== confirmPassword) {
+    console.log('Passwords do not match');
+  }
+});
+```
+
+### Debounced Search
+
+```javascript
+const searchStore = reactive({
+  query: '',
+  results: [],
+  isLoading: false,
+});
+
+let searchTimeout;
+
+watch(() => searchStore.query, (query) => {
+  clearTimeout(searchTimeout);
+  
+  if (query.length > 2) {
+    searchTimeout = setTimeout(async () => {
+      searchStore.isLoading = true;
+      try {
+        const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+        searchStore.results = await response.json();
+      } catch (error) {
+        console.error('Search failed:', error);
+      } finally {
+        searchStore.isLoading = false;
+      }
+    }, 300);
+  } else {
+    searchStore.results = [];
+  }
+});
+```
+
+### Local Storage Sync
+
+```javascript
+const appState = reactive({
+  theme: 'light',
+  language: 'en',
+  preferences: {
+    notifications: true,
+    autoSave: true,
+  },
+});
+
+// Sync theme to localStorage
+watch(() => appState.theme, (theme) => {
+  localStorage.setItem('theme', theme);
+});
+
+// Sync language to localStorage
+watch(() => appState.language, (language) => {
+  localStorage.setItem('language', language);
+});
+
+// Sync all preferences
+watch(() => appState.preferences, (preferences) => {
+  localStorage.setItem('preferences', JSON.stringify(preferences));
+}, { deep: true });
+```
+
+## Limitations
+
+### No Cleanup Function
+
+The current watch implementation doesn't return a cleanup function:
+
+```javascript
+// ❌ This doesn't work as expected
+const unwatch = watch(() => state.count, (value) => {
+  console.log(value);
+});
+
+// No cleanup function available
+// unwatch(); // This doesn't exist
+```
+
+### No Immediate Option
+
+Watch doesn't have an immediate option like some other libraries:
+
+```javascript
+// ❌ No immediate option
+// watch(() => state.count, callback, { immediate: true });
+
+// ✅ Use a separate call for immediate execution
+const callback = (value) => console.log(value);
+callback(state.count); // Execute immediately
+watch(() => state.count, callback); // Then watch for changes
+```
+
+## Learn More
+
+- [Watching State Guide](/docs/guides/watching-state) - Understanding watchers
+- [Reactive State](/docs/guides/reactive-state) - Reactive fundamentals
+- [Computed Values](/docs/guides/computed-values) - Derived state
+- [React Integration](/docs/guides/react-integration) - React applications

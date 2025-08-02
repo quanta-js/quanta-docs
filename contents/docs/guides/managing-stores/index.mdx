@@ -1,57 +1,585 @@
 ---
 title: Managing Stores
-description: How to create and manage stores in QuantaJS.
+description: Learn how to effectively manage stores in QuantaJS applications.
 ---
 
 # Managing Stores
 
-The `createStore` function is the core of QuantaJS, providing a structured way to manage state, getters, and actions.
+QuantaJS provides powerful tools for managing state across your application. This guide covers best practices for organizing, creating, and using stores effectively.
 
-## Creating a Store
+## Store Organization
+
+### Single Store Pattern
+
+For smaller applications, a single store can manage all state:
 
 ```javascript
-import { createStore } from "quantajs";
+import { createStore } from '@quantajs/core';
 
-const counter = createStore({
-  state: { count: 0 },
+const appStore = createStore('app', {
+  state: () => ({
+    user: null,
+    todos: [],
+    settings: {
+      theme: 'light',
+      notifications: true,
+    },
+    ui: {
+      isLoading: false,
+      sidebarOpen: false,
+    },
+  }),
   getters: {
-    isPositive: (state) => state.count > 0,
+    isAuthenticated: (state) => !!state.user,
+    completedTodos: (state) => state.todos.filter(todo => todo.done),
+    pendingTodos: (state) => state.todos.filter(todo => !todo.done),
   },
   actions: {
-    increment() {
-      this.count++;
+    // User actions
+    async login(credentials) {
+      this.ui.isLoading = true;
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          body: JSON.stringify(credentials),
+        });
+        this.user = await response.json();
+      } catch (error) {
+        console.error('Login failed:', error);
+      } finally {
+        this.ui.isLoading = false;
+      }
+    },
+    logout() {
+      this.user = null;
+      this.todos = [];
+    },
+
+    // Todo actions
+    addTodo(text) {
+      this.todos.push({
+        id: Date.now(),
+        text,
+        done: false,
+        createdAt: new Date(),
+      });
+    },
+    toggleTodo(id) {
+      const todo = this.todos.find(t => t.id === id);
+      if (todo) todo.done = !todo.done;
+    },
+    removeTodo(id) {
+      this.todos = this.todos.filter(t => t.id !== id);
+    },
+
+    // Settings actions
+    updateSettings(updates) {
+      Object.assign(this.settings, updates);
+    },
+    toggleTheme() {
+      this.settings.theme = this.settings.theme === 'light' ? 'dark' : 'light';
+    },
+
+    // UI actions
+    setLoading(isLoading) {
+      this.ui.isLoading = isLoading;
+    },
+    toggleSidebar() {
+      this.ui.sidebarOpen = !this.ui.sidebarOpen;
+    },
+  },
+});
+```
+
+### Multiple Stores Pattern
+
+For larger applications, split state into domain-specific stores:
+
+```javascript
+// User store
+const userStore = createStore('user', {
+  state: () => ({
+    user: null,
+    isLoading: false,
+    error: null,
+  }),
+  getters: {
+    isAuthenticated: (state) => !!state.user,
+    userRole: (state) => state.user?.role || 'guest',
+  },
+  actions: {
+    async login(credentials) {
+      this.isLoading = true;
+      this.error = null;
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          body: JSON.stringify(credentials),
+        });
+        this.user = await response.json();
+      } catch (error) {
+        this.error = error.message;
+      } finally {
+        this.isLoading = false;
+      }
+    },
+    logout() {
+      this.user = null;
+      this.error = null;
     },
   },
 });
 
-console.log(counter.count); // 0
-counter.increment();
-console.log(counter.count); // 1
-console.log(counter.isPositive); // true
-```
-
-## Flattened Access
-
-Stores flatten state, getters, and actions into a single interface: 
-
-```javascript
-counter.count = 5; // Direct state mutation
-console.log(counter.isPositive); // true
-```
-
-## Store Registry
-
-Stores are registered by name to prevent duplicates:
-
-```javascript
-import { useStore } from "quantajs";
-
-const store = createStore("myStore", {
-  state: { value: "hello" },
+// Todo store
+const todoStore = createStore('todos', {
+  state: () => ({
+    todos: [],
+    filter: 'all',
+    isLoading: false,
+  }),
+  getters: {
+    filteredTodos: (state) => {
+      switch (state.filter) {
+        case 'active':
+          return state.todos.filter(todo => !todo.done);
+        case 'completed':
+          return state.todos.filter(todo => todo.done);
+        default:
+          return state.todos;
+      }
+    },
+    completedCount: (state) => state.todos.filter(todo => todo.done).length,
+    pendingCount: (state) => state.todos.filter(todo => !todo.done).length,
+  },
+  actions: {
+    async fetchTodos() {
+      this.isLoading = true;
+      try {
+        const response = await fetch('/api/todos');
+        this.todos = await response.json();
+      } catch (error) {
+        console.error('Failed to fetch todos:', error);
+      } finally {
+        this.isLoading = false;
+      }
+    },
+    addTodo(text) {
+      this.todos.push({
+        id: Date.now(),
+        text,
+        done: false,
+        createdAt: new Date(),
+      });
+    },
+    toggleTodo(id) {
+      const todo = this.todos.find(t => t.id === id);
+      if (todo) todo.done = !todo.done;
+    },
+    setFilter(filter) {
+      this.filter = filter;
+    },
+  },
 });
 
-const retrieved = useStore("myStore");
-console.log(retrieved.value); // "hello"
+// Settings store
+const settingsStore = createStore('settings', {
+  state: () => ({
+    theme: 'light',
+    language: 'en',
+    notifications: {
+      email: true,
+      push: false,
+    },
+  }),
+  actions: {
+    updateTheme(theme) {
+      this.theme = theme;
+      localStorage.setItem('theme', theme);
+    },
+    updateLanguage(language) {
+      this.language = language;
+      localStorage.setItem('language', language);
+    },
+    toggleNotification(type) {
+      this.notifications[type] = !this.notifications[type];
+    },
+  },
+});
 ```
 
-<Callout type="warning"> Attempting to create a store with an existing name throws an error. </Callout>
+## Store Communication
+
+### Cross-Store Actions
+
+Stores can communicate with each other through actions:
+
+```javascript
+const userStore = createStore('user', {
+  state: () => ({ user: null }),
+  actions: {
+    async login(credentials) {
+      // ... login logic
+      this.user = userData;
+      
+      // Notify other stores
+      todoStore.fetchTodos();
+      settingsStore.loadUserPreferences(userData.id);
+    },
+    logout() {
+      this.user = null;
+      
+      // Clear other stores
+      todoStore.clearTodos();
+      settingsStore.resetToDefaults();
+    },
+  },
+});
+
+const todoStore = createStore('todos', {
+  state: () => ({ todos: [] }),
+  actions: {
+    clearTodos() {
+      this.todos = [];
+    },
+    async fetchTodos() {
+      if (!userStore.user) return;
+      
+      const response = await fetch(`/api/users/${userStore.user.id}/todos`);
+      this.todos = await response.json();
+    },
+  },
+});
+```
+
+### Shared State
+
+For shared state between stores, create a shared store:
+
+```javascript
+const sharedStore = createStore('shared', {
+  state: () => ({
+    isLoading: false,
+    error: null,
+    notifications: [],
+  }),
+  actions: {
+    setLoading(isLoading) {
+      this.isLoading = isLoading;
+    },
+    setError(error) {
+      this.error = error;
+    },
+    addNotification(message, type = 'info') {
+      this.notifications.push({
+        id: Date.now(),
+        message,
+        type,
+        timestamp: new Date(),
+      });
+    },
+    removeNotification(id) {
+      this.notifications = this.notifications.filter(n => n.id !== id);
+    },
+  },
+});
+
+// Other stores can access shared state
+const userStore = createStore('user', {
+  state: () => ({ user: null }),
+  actions: {
+    async login(credentials) {
+      sharedStore.setLoading(true);
+      sharedStore.setError(null);
+      
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          body: JSON.stringify(credentials),
+        });
+        this.user = await response.json();
+        sharedStore.addNotification('Login successful!', 'success');
+      } catch (error) {
+        sharedStore.setError(error.message);
+        sharedStore.addNotification('Login failed', 'error');
+      } finally {
+        sharedStore.setLoading(false);
+      }
+    },
+  },
+});
+```
+
+## Store Lifecycle
+
+### Initialization
+
+Initialize stores with default values and load persisted data:
+
+```javascript
+const appStore = createStore('app', {
+  state: () => ({
+    user: null,
+    settings: {
+      theme: 'light',
+      language: 'en',
+    },
+  }),
+  actions: {
+    initialize() {
+      // Load persisted settings
+      const savedTheme = localStorage.getItem('theme');
+      const savedLanguage = localStorage.getItem('language');
+      
+      if (savedTheme) this.settings.theme = savedTheme;
+      if (savedLanguage) this.settings.language = savedLanguage;
+      
+      // Check for saved user session
+      const savedUser = localStorage.getItem('user');
+      if (savedUser) {
+        try {
+          this.user = JSON.parse(savedUser);
+        } catch (error) {
+          localStorage.removeItem('user');
+        }
+      }
+    },
+    
+    persistSettings() {
+      localStorage.setItem('theme', this.settings.theme);
+      localStorage.setItem('language', this.settings.language);
+    },
+    
+    persistUser() {
+      if (this.user) {
+        localStorage.setItem('user', JSON.stringify(this.user));
+      } else {
+        localStorage.removeItem('user');
+      }
+    },
+  },
+});
+
+// Initialize on app start
+appStore.initialize();
+```
+
+### Cleanup
+
+Clean up stores when components unmount or when needed:
+
+```javascript
+const todoStore = createStore('todos', {
+  state: () => ({ todos: [] }),
+  actions: {
+    cleanup() {
+      this.todos = [];
+      // Cancel any pending requests
+      if (this.currentRequest) {
+        this.currentRequest.abort();
+      }
+    },
+  },
+});
+
+// In React component
+useEffect(() => {
+  return () => {
+    todoStore.cleanup();
+  };
+}, []);
+```
+
+## Performance Optimization
+
+### Selective Updates
+
+Use selectors to prevent unnecessary re-renders:
+
+```javascript
+// In React components
+function TodoList() {
+  // Only re-render when todos change
+  const todos = useQuantaStore(todoStore, store => store.filteredTodos);
+  
+  return (
+    <ul>
+      {todos.map(todo => (
+        <TodoItem key={todo.id} todo={todo} />
+      ))}
+    </ul>
+  );
+}
+
+function TodoStats() {
+  // Only re-render when counts change
+  const stats = useQuantaStore(todoStore, store => ({
+    completed: store.completedCount,
+    pending: store.pendingCount,
+  }));
+  
+  return (
+    <div>
+      <p>Completed: {stats.completed}</p>
+      <p>Pending: {stats.pending}</p>
+    </div>
+  );
+}
+```
+
+### Lazy Loading
+
+Load data only when needed:
+
+```javascript
+const userStore = createStore('user', {
+  state: () => ({
+    user: null,
+    profile: null,
+    isLoading: false,
+  }),
+  actions: {
+    async loadProfile() {
+      if (this.profile || !this.user) return;
+      
+      this.isLoading = true;
+      try {
+        const response = await fetch(`/api/users/${this.user.id}/profile`);
+        this.profile = await response.json();
+      } catch (error) {
+        console.error('Failed to load profile:', error);
+      } finally {
+        this.isLoading = false;
+      }
+    },
+  },
+});
+```
+
+## Error Handling
+
+### Centralized Error Handling
+
+Create a centralized error handling system:
+
+```javascript
+const errorStore = createStore('errors', {
+  state: () => ({
+    errors: [],
+    globalError: null,
+  }),
+  actions: {
+    addError(error, context = '') {
+      const errorInfo = {
+        id: Date.now(),
+        message: error.message || error,
+        context,
+        timestamp: new Date(),
+        stack: error.stack,
+      };
+      
+      this.errors.push(errorInfo);
+      this.globalError = errorInfo;
+      
+      // Log to external service
+      this.logError(errorInfo);
+    },
+    
+    clearError(id) {
+      this.errors = this.errors.filter(e => e.id !== id);
+      if (this.globalError?.id === id) {
+        this.globalError = null;
+      }
+    },
+    
+    clearAllErrors() {
+      this.errors = [];
+      this.globalError = null;
+    },
+    
+    async logError(errorInfo) {
+      try {
+        await fetch('/api/errors', {
+          method: 'POST',
+          body: JSON.stringify(errorInfo),
+        });
+      } catch (error) {
+        console.error('Failed to log error:', error);
+      }
+    },
+  },
+});
+
+// Use in other stores
+const userStore = createStore('user', {
+  state: () => ({ user: null }),
+  actions: {
+    async login(credentials) {
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          body: JSON.stringify(credentials),
+        });
+        
+        if (!response.ok) {
+          throw new Error('Login failed');
+        }
+        
+        this.user = await response.json();
+      } catch (error) {
+        errorStore.addError(error, 'user.login');
+      }
+    },
+  },
+});
+```
+
+## Testing Stores
+
+### Unit Testing
+
+Test stores in isolation:
+
+```javascript
+import { createStore } from '@quantajs/core';
+
+describe('Todo Store', () => {
+  let todoStore;
+  
+  beforeEach(() => {
+    todoStore = createStore('test-todos', {
+      state: () => ({ todos: [] }),
+      actions: {
+        addTodo(text) {
+          this.todos.push({ id: Date.now(), text, done: false });
+        },
+        toggleTodo(id) {
+          const todo = this.todos.find(t => t.id === id);
+          if (todo) todo.done = !todo.done;
+        },
+      },
+    });
+  });
+  
+  test('should add todo', () => {
+    todoStore.addTodo('Test todo');
+    expect(todoStore.todos).toHaveLength(1);
+    expect(todoStore.todos[0].text).toBe('Test todo');
+  });
+  
+  test('should toggle todo', () => {
+    todoStore.addTodo('Test todo');
+    const todo = todoStore.todos[0];
+    
+    expect(todo.done).toBe(false);
+    todoStore.toggleTodo(todo.id);
+    expect(todo.done).toBe(true);
+  });
+});
+```
+
+## Learn More
+
+- [Reactive State](/docs/guides/reactive-state) - Understanding reactivity
+- [Computed Values](/docs/guides/computed-values) - Derived state
+- [React Integration](/docs/guides/react-integration) - React applications
+- [API Reference](/docs/api/create-store) - Complete API documentation

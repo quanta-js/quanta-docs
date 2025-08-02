@@ -6,25 +6,230 @@ description: API reference for the reactive function.
 # Reactive
 ## `reactive`
 
-Creates a reactive proxy for an object, enabling automatic dependency tracking.
+Creates a reactive proxy object that tracks property access and changes for automatic reactivity.
 
 ## Signature
 
 ```typescript
-function reactive<T>(target: T): T;
+function reactive<T extends object>(target: T): T;
 ```
 
 ## Parameters
 
-- `target`: The object to make reactive (e.g., plain object, Map, Set).
+- `target`: The object to make reactive. Can be a plain object, array, Map, or Set.
 
 ## Returns
 
-A `reactive` version of the target object.
+A reactive proxy of the original object that tracks all property access and mutations.
 
-## Example
+## Basic Usage
 
 ```javascript
-const state = reactive({ count: 0 });
-state.count = 1; // Triggers reactivity
+import { reactive } from '@quantajs/core';
+
+const state = reactive({
+  count: 0,
+  name: 'Quanta',
+  user: {
+    firstName: 'John',
+    lastName: 'Doe',
+  },
+});
+
+// All changes are tracked automatically
+state.count++;
+state.name = 'QuantaJS';
+state.user.firstName = 'Jane';
 ```
+
+## Supported Types
+
+### Objects
+
+```javascript
+const user = reactive({
+  name: 'Alice',
+  age: 25,
+  preferences: {
+    theme: 'dark',
+    notifications: true,
+  },
+});
+
+user.age = 26; // Tracked
+user.preferences.theme = 'light'; // Nested changes tracked
+```
+
+### Arrays
+
+```javascript
+const todos = reactive([
+  { id: 1, text: 'Learn QuantaJS', done: false },
+  { id: 2, text: 'Build an app', done: false },
+]);
+
+// Array mutations are tracked
+todos.push({ id: 3, text: 'Deploy', done: false });
+todos[0].done = true; // Nested property changes tracked
+todos.splice(1, 1); // Array method changes tracked
+```
+
+### Maps
+
+```javascript
+const userMap = reactive(new Map([
+  ['user1', { name: 'Alice', role: 'admin' }],
+  ['user2', { name: 'Bob', role: 'user' }],
+]));
+
+// Map operations are tracked
+userMap.set('user3', { name: 'Charlie', role: 'user' });
+userMap.get('user1').role = 'moderator'; // Nested changes tracked
+userMap.delete('user2');
+console.log(userMap.size); // Size changes tracked
+```
+
+### Sets
+
+```javascript
+const uniqueIds = reactive(new Set([1, 2, 3, 4, 5]));
+
+// Set operations are tracked
+uniqueIds.add(6);
+uniqueIds.delete(1);
+console.log(uniqueIds.size); // Size changes tracked
+```
+
+## Deep Reactivity
+
+Nested objects and arrays are automatically made reactive:
+
+```javascript
+const store = reactive({
+  users: [
+    { id: 1, profile: { name: 'Alice', settings: { theme: 'dark' } } },
+    { id: 2, profile: { name: 'Bob', settings: { theme: 'light' } } },
+  ],
+  metadata: {
+    total: 2,
+    lastUpdated: new Date(),
+  },
+});
+
+// All nested changes are tracked
+store.users[0].profile.settings.theme = 'light';
+store.metadata.total = 3;
+store.users.push({ id: 3, profile: { name: 'Charlie', settings: { theme: 'auto' } } });
+```
+
+## Performance Considerations
+
+### Large Objects
+
+For large objects, consider using specific selectors:
+
+```javascript
+const largeStore = reactive({
+  items: Array.from({ length: 10000 }, (_, i) => ({ id: i, value: Math.random() })),
+  metadata: { /* large object */ },
+});
+
+// Good: Access specific properties
+const itemCount = largeStore.items.length;
+const firstItem = largeStore.items[0];
+
+// Avoid: Iterating over entire large arrays in watchers
+// watch(() => largeStore.items, (items) => { ... }); // Expensive!
+```
+
+### Computed Values
+
+Combine with computed for derived state:
+
+```javascript
+import { reactive, computed } from '@quantajs/core';
+
+const state = reactive({
+  items: [1, 2, 3, 4, 5],
+});
+
+const sum = computed(() => state.items.reduce((a, b) => a + b, 0));
+const average = computed(() => sum.value / state.items.length);
+
+console.log(sum.value); // 15
+console.log(average.value); // 3
+
+state.items.push(6);
+console.log(sum.value); // 21
+console.log(average.value); // 3.5
+```
+
+## Integration with Stores
+
+When using `createStore`, the state is automatically made reactive:
+
+```javascript
+import { createStore } from '@quantajs/core';
+
+const userStore = createStore('user', {
+  state: () => ({
+    profile: {
+      name: 'John Doe',
+      email: 'john@example.com',
+    },
+    preferences: {
+      theme: 'dark',
+      notifications: true,
+    },
+  }),
+  actions: {
+    updateProfile(updates) {
+      Object.assign(this.profile, updates); // All changes tracked
+    },
+    toggleTheme() {
+      this.preferences.theme = this.preferences.theme === 'dark' ? 'light' : 'dark';
+    },
+  },
+});
+
+// All state changes trigger reactivity automatically
+userStore.updateProfile({ name: 'Jane Doe' });
+userStore.toggleTheme();
+```
+
+## Limitations
+
+### Primitive Values
+
+Reactive only works with objects. For primitives, use refs or wrap in objects:
+
+```javascript
+// This won't work as expected
+const count = reactive(0); // ❌
+
+// Use an object instead
+const state = reactive({ count: 0 }); // ✅
+state.count = 5;
+
+// Or use computed for derived primitives
+const doubleCount = computed(() => state.count * 2);
+```
+
+### Non-Enumerable Properties
+
+Non-enumerable properties are not tracked:
+
+```javascript
+const obj = reactive({});
+Object.defineProperty(obj, 'hidden', { value: 'secret', enumerable: false });
+
+// This won't trigger reactivity
+obj.hidden = 'new secret';
+```
+
+## Learn More
+
+- [Reactive State Guide](/docs/guides/reactive-state) - Understanding reactivity
+- [Computed Values](/docs/guides/computed-values) - Derived state
+- [Watching State](/docs/guides/watching-state) - Side effects
+- [React Integration](/docs/guides/react-integration) - React applications

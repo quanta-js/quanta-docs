@@ -12,11 +12,11 @@ QuantaJS provides a powerful reactivity system via the `reactive` function, allo
 Use the `reactive` function to make an object reactive:
 
 ```javascript
-import { reactive } from "quantajs";
+import { reactive } from '@quantajs/core';
 
 const state = reactive({
   count: 0,
-  name: "Quanta",
+  name: 'Quanta',
 });
 
 state.count++; // Updates are tracked automatically
@@ -29,28 +29,78 @@ Nested objects are also reactive:
 
 ```javascript
 const state = reactive({
-  user: { name: "Alice", age: 25 },
+  user: { name: 'Alice', age: 25 },
 });
 
 state.user.age = 26; // Nested property is reactive
 console.log(state.user.age); // 26
 ```
 
-## Reactive State with Collections (Map/Set) 
+## Reactive State with Collections (Map/Set)
 
 QuantaJS supports reactive Map and Set:
 
 ```javascript
-const map = reactive(new Map([["key", "value"]]));
-map.set("newKey", "newValue");
-console.log(map.get("newKey")); // "newValue"
+const map = reactive(new Map([['key', 'value']]));
+map.set('newKey', 'newValue');
+console.log(map.get('newKey')); // 'newValue'
 
 const set = reactive(new Set([1, 2, 3]));
 set.add(4);
 console.log(set.size); // 4
 ```
 
+## Using Reactive State in Stores
+
+When creating stores, the state is automatically made reactive:
+
+```javascript
+import { createStore } from '@quantajs/core';
+
+const userStore = createStore('user', {
+  state: () => ({
+    profile: {
+      name: 'John Doe',
+      email: 'john@example.com',
+    },
+    preferences: {
+      theme: 'dark',
+      notifications: true,
+    },
+  }),
+  actions: {
+    updateName(name) {
+      this.profile.name = name; // Automatically reactive
+    },
+    toggleTheme() {
+      this.preferences.theme = this.preferences.theme === 'dark' ? 'light' : 'dark';
+    },
+  },
+});
+
+// All changes are tracked automatically
+userStore.updateName('Jane Doe');
+userStore.toggleTheme();
+```
+
+## Reactivity with Arrays
+
+Arrays are fully reactive, including all array methods:
+
+```javascript
+const todos = reactive([
+  { id: 1, text: 'Learn QuantaJS', done: false },
+  { id: 2, text: 'Build an app', done: false },
+]);
+
+// Array mutations are tracked
+todos.push({ id: 3, text: 'Deploy', done: false });
+todos[0].done = true; // Nested property changes are tracked
+todos.splice(1, 1); // Array method changes are tracked
+```
+
 ## Learn More
 
-- Use [computed](/docs/guides/computed-values) for derived state.
-- Monitor changes with [watch](/docs/guides/watching-state).
+- Use [computed](/docs/guides/computed-values) for derived state
+- Monitor changes with [watch](/docs/guides/watching-state)
+- Explore [React integration](/docs/guides/react-integration) for React applications

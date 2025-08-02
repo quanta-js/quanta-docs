@@ -1,0 +1,671 @@
+---
+title: Next.js Integration
+description: Complete guide to using QuantaJS with Next.js, including App Router, Server Components, and best practices.
+---
+
+# Next.js Integration
+
+QuantaJS is fully compatible with Next.js and provides seamless integration with all Next.js features including App Router, Server Components, and Server-Side Rendering. This guide covers everything you need to know to use QuantaJS effectively in your Next.js applications.
+
+## Installation
+
+Install both packages in your Next.js project:
+
+```bash
+npm install @quantajs/react @quantajs/core
+# or
+yarn add @quantajs/react @quantajs/core
+# or
+pnpm add @quantajs/react @quantajs/core
+```
+
+## Basic Setup
+
+### 1. Create Your Stores
+
+First, create your stores in a dedicated directory:
+
+```javascript
+// stores/userStore.js
+import { createStore } from '@quantajs/react';
+
+export const userStore = createStore('user', {
+  state: () => ({
+    user: null,
+    isAuthenticated: false,
+    loading: false,
+  }),
+  getters: {
+    displayName: (state) => state.user?.name || 'Guest',
+    isAdmin: (state) => state.user?.role === 'admin',
+  },
+  actions: {
+    async login(credentials) {
+      this.loading = true;
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(credentials),
+        });
+        const user = await response.json();
+        this.user = user;
+        this.isAuthenticated = true;
+      } catch (error) {
+        console.error('Login failed:', error);
+      } finally {
+        this.loading = false;
+      }
+    },
+    logout() {
+      this.user = null;
+      this.isAuthenticated = false;
+    },
+  },
+});
+```
+
+```javascript
+// stores/cartStore.js
+import { createStore } from '@quantajs/react';
+
+export const cartStore = createStore('cart', {
+  state: () => ({
+    items: [],
+    isOpen: false,
+  }),
+  getters: {
+    totalItems: (state) => state.items.reduce((sum, item) => sum + item.quantity, 0),
+    totalPrice: (state) => state.items.reduce((sum, item) => sum + (item.price * item.quantity), 0),
+  },
+  actions: {
+    addItem(product) {
+      const existingItem = this.items.find(item => item.id === product.id);
+      if (existingItem) {
+        existingItem.quantity++;
+      } else {
+        this.items.push({ ...product, quantity: 1 });
+      }
+    },
+    removeItem(productId) {
+      this.items = this.items.filter(item => item.id !== productId);
+    },
+    toggleCart() {
+      this.isOpen = !this.isOpen;
+    },
+  },
+});
+```
+
+### 2. Setup Provider in Root Layout
+
+Configure the QuantaProvider in your root layout:
+
+```javascript
+// app/layout.tsx
+import { QuantaProvider } from '@quantajs/react';
+import { userStore, cartStore } from '@/stores';
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en">
+      <body>
+        <QuantaProvider stores={{ user: userStore, cart: cartStore }}>
+          {children}
+        </QuantaProvider>
+      </body>
+    </html>
+  );
+}
+```
+
+### 3. Use in Client Components
+
+Create client components that use QuantaJS hooks:
+
+```javascript
+// components/UserProfile.jsx
+'use client';
+import { useStore } from '@quantajs/react';
+
+export default function UserProfile() {
+  const userStore = useStore('user');
+  
+  if (userStore.loading) {
+    return <div>Loading...</div>;
+  }
+  
+  if (!userStore.isAuthenticated) {
+    return <div>Please log in</div>;
+  }
+  
+  return (
+    <div>
+      <h1>Welcome, {userStore.displayName}!</h1>
+      {userStore.isAdmin && <p>Admin Dashboard</p>}
+      <button onClick={() => userStore.logout()}>Logout</button>
+    </div>
+  );
+}
+```
+
+## App Router Integration
+
+### Server Components with Store Data
+
+You can access store data in Server Components for initial rendering:
+
+```javascript
+// app/dashboard/page.jsx
+import { userStore } from '@/stores/userStore';
+import DashboardClient from './DashboardClient';
+
+export default function DashboardPage() {
+  // Access store state on server for initial render
+  const user = userStore.user;
+  const isAdmin = userStore.isAdmin;
+  
+  return (
+    <div>
+      <h1>Dashboard</h1>
+      {isAdmin && <p>Admin Features Available</p>}
+      <DashboardClient initialUser={user} />
+    </div>
+  );
+}
+```
+
+### Client Components for Interactivity
+
+```javascript
+// app/dashboard/DashboardClient.jsx
+'use client';
+import { useStore } from '@quantajs/react';
+
+export default function DashboardClient({ initialUser }) {
+  const userStore = useStore('user');
+  
+  return (
+    <div>
+      <h2>Welcome back, {userStore.displayName}!</h2>
+      <div>
+        <p>Email: {userStore.user?.email}</p>
+        <p>Role: {userStore.user?.role}</p>
+      </div>
+    </div>
+  );
+}
+```
+
+## Advanced Patterns
+
+### 1. Multiple Stores with Context
+
+For complex applications, you might want to organize stores by feature:
+
+```javascript
+// stores/index.js
+import { userStore } from './userStore';
+import { cartStore } from './cartStore';
+import { productStore } from './productStore';
+
+export const stores = {
+  user: userStore,
+  cart: cartStore,
+  product: productStore,
+};
+```
+
+```javascript
+// app/layout.jsx
+import { QuantaProvider } from '@quantajs/react';
+import { stores } from '@/stores';
+
+export default function RootLayout({ children }) {
+  return (
+    <html>
+      <body>
+        <QuantaProvider stores={stores}>
+          {children}
+        </QuantaProvider>
+      </body>
+    </html>
+  );
+}
+```
+
+### 2. Custom Hooks for Store Logic
+
+Create custom hooks to encapsulate store logic:
+
+```javascript
+// hooks/useAuth.js
+'use client';
+import { useStore } from '@quantajs/react';
+
+export function useAuth() {
+  const userStore = useStore('user');
+  
+  return {
+    user: userStore.user,
+    isAuthenticated: userStore.isAuthenticated,
+    loading: userStore.loading,
+    login: userStore.login,
+    logout: userStore.logout,
+    isAdmin: userStore.isAdmin,
+  };
+}
+```
+
+```javascript
+// hooks/useCart.js
+'use client';
+import { useStore } from '@quantajs/react';
+
+export function useCart() {
+  const cartStore = useStore('cart');
+  
+  return {
+    items: cartStore.items,
+    totalItems: cartStore.totalItems,
+    totalPrice: cartStore.totalPrice,
+    isOpen: cartStore.isOpen,
+    addItem: cartStore.addItem,
+    removeItem: cartStore.removeItem,
+    toggleCart: cartStore.toggleCart,
+  };
+}
+```
+
+### 3. Performance Optimization with Selectors
+
+Use selectors to prevent unnecessary re-renders:
+
+```javascript
+// components/CartIcon.jsx
+'use client';
+import { useQuantaStore } from '@quantajs/react';
+import { cartStore } from '@/stores/cartStore';
+
+export default function CartIcon() {
+  // Only re-render when totalItems or isOpen changes
+  const { totalItems, isOpen } = useQuantaStore(cartStore, store => ({
+    totalItems: store.totalItems,
+    isOpen: store.isOpen,
+  }));
+  
+  return (
+    <button onClick={() => cartStore.toggleCart()}>
+      Cart ({totalItems})
+      {isOpen && <span>Open</span>}
+    </button>
+  );
+}
+```
+
+## Server-Side Rendering (SSR)
+
+### Initial State Hydration
+
+For SSR, you can pre-populate store state:
+
+```javascript
+// app/api/auth/route.js
+import { userStore } from '@/stores/userStore';
+
+export async function GET(request) {
+  // Set initial state based on server-side data
+  const user = await getCurrentUser(request);
+  if (user) {
+    userStore.user = user;
+    userStore.isAuthenticated = true;
+  }
+  
+  return Response.json({ user });
+}
+```
+
+### Server Actions with Store Updates
+
+```javascript
+// app/actions/auth.js
+'use server';
+import { userStore } from '@/stores/userStore';
+
+export async function loginAction(formData) {
+  const email = formData.get('email');
+  const password = formData.get('password');
+  
+  try {
+    const user = await authenticateUser(email, password);
+    // Update store state
+    userStore.user = user;
+    userStore.isAuthenticated = true;
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+```
+
+## TypeScript Support
+
+### Type-Safe Stores
+
+```typescript
+// stores/userStore.ts
+import { createStore } from '@quantajs/react';
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: 'user' | 'admin';
+}
+
+interface UserState {
+  user: User | null;
+  isAuthenticated: boolean;
+  loading: boolean;
+}
+
+export const userStore = createStore<UserState>('user', {
+  state: (): UserState => ({
+    user: null,
+    isAuthenticated: false,
+    loading: false,
+  }),
+  getters: {
+    displayName: (state) => state.user?.name || 'Guest',
+    isAdmin: (state) => state.user?.role === 'admin',
+  },
+  actions: {
+    async login(credentials: { email: string; password: string }) {
+      this.loading = true;
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(credentials),
+        });
+        const user: User = await response.json();
+        this.user = user;
+        this.isAuthenticated = true;
+      } catch (error) {
+        console.error('Login failed:', error);
+      } finally {
+        this.loading = false;
+      }
+    },
+    logout() {
+      this.user = null;
+      this.isAuthenticated = false;
+    },
+  },
+});
+```
+
+### Type-Safe Hooks
+
+```typescript
+// hooks/useAuth.ts
+'use client';
+import { useStore } from '@quantajs/react';
+import { userStore } from '@/stores/userStore';
+
+export function useAuth() {
+  const store = useStore('user');
+  
+  return {
+    user: store.user,
+    isAuthenticated: store.isAuthenticated,
+    loading: store.loading,
+    login: store.login,
+    logout: store.logout,
+    isAdmin: store.isAdmin,
+  };
+}
+```
+
+## Best Practices
+
+### 1. Store Organization
+
+Organize stores by feature or domain:
+
+```
+stores/
+├── auth/
+│   ├── userStore.js
+│   └── sessionStore.js
+├── ecommerce/
+│   ├── cartStore.js
+│   ├── productStore.js
+│   └── orderStore.js
+├── ui/
+│   ├── themeStore.js
+│   └── modalStore.js
+└── index.js
+```
+
+### 2. Error Handling
+
+Implement proper error handling in your stores:
+
+```javascript
+// stores/userStore.js
+export const userStore = createStore('user', {
+  state: () => ({
+    user: null,
+    isAuthenticated: false,
+    loading: false,
+    error: null,
+  }),
+  actions: {
+    async login(credentials) {
+      this.loading = true;
+      this.error = null;
+      
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(credentials),
+        });
+        
+        if (!response.ok) {
+          throw new Error('Login failed');
+        }
+        
+        const user = await response.json();
+        this.user = user;
+        this.isAuthenticated = true;
+      } catch (error) {
+        this.error = error.message;
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+  },
+});
+```
+
+### 3. Loading States
+
+Always handle loading states for better UX:
+
+```javascript
+// components/LoginForm.jsx
+'use client';
+import { useStore } from '@quantajs/react';
+
+export default function LoginForm() {
+  const userStore = useStore('user');
+  
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    
+    try {
+      await userStore.login({
+        email: formData.get('email'),
+        password: formData.get('password'),
+      });
+    } catch (error) {
+      // Error is handled in the store
+    }
+  };
+  
+  return (
+    <form onSubmit={handleSubmit}>
+      {userStore.error && (
+        <div className="error">{userStore.error}</div>
+      )}
+      <input name="email" type="email" required />
+      <input name="password" type="password" required />
+      <button type="submit" disabled={userStore.loading}>
+        {userStore.loading ? 'Logging in...' : 'Login'}
+      </button>
+    </form>
+  );
+}
+```
+
+### 4. Persistence
+
+For data that needs to persist across sessions:
+
+```javascript
+// stores/cartStore.js
+export const cartStore = createStore('cart', {
+  state: () => {
+    // Load from localStorage on initialization
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('cart');
+      return saved ? JSON.parse(saved) : { items: [], isOpen: false };
+    }
+    return { items: [], isOpen: false };
+  },
+  actions: {
+    addItem(product) {
+      const existingItem = this.items.find(item => item.id === product.id);
+      if (existingItem) {
+        existingItem.quantity++;
+      } else {
+        this.items.push({ ...product, quantity: 1 });
+      }
+      // Save to localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('cart', JSON.stringify(this));
+      }
+    },
+  },
+});
+```
+
+## Common Patterns
+
+### 1. Form Handling
+
+```javascript
+// components/ProductForm.jsx
+'use client';
+import { useStore } from '@quantajs/react';
+import { useState } from 'react';
+
+export default function ProductForm() {
+  const productStore = useStore('product');
+  const [formData, setFormData] = useState({
+    name: '',
+    price: '',
+    description: '',
+  });
+  
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    await productStore.createProduct(formData);
+    setFormData({ name: '', price: '', description: '' });
+  };
+  
+  return (
+    <form onSubmit={handleSubmit}>
+      <input
+        value={formData.name}
+        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+        placeholder="Product name"
+      />
+      {/* Other fields */}
+      <button type="submit" disabled={productStore.loading}>
+        Create Product
+      </button>
+    </form>
+  );
+}
+```
+
+### 2. Real-time Updates
+
+```javascript
+// stores/notificationStore.js
+export const notificationStore = createStore('notification', {
+  state: () => ({
+    notifications: [],
+    unreadCount: 0,
+  }),
+  actions: {
+    addNotification(notification) {
+      this.notifications.unshift(notification);
+      this.unreadCount++;
+    },
+    markAsRead(id) {
+      const notification = this.notifications.find(n => n.id === id);
+      if (notification && !notification.read) {
+        notification.read = true;
+        this.unreadCount--;
+      }
+    },
+  },
+});
+
+// Setup WebSocket connection
+if (typeof window !== 'undefined') {
+  const ws = new WebSocket('ws://localhost:3001');
+  ws.onmessage = (event) => {
+    const notification = JSON.parse(event.data);
+    notificationStore.addNotification(notification);
+  };
+}
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Hydration Mismatch**: Ensure server and client render the same content
+2. **Store Not Found**: Check that the store name matches in Provider and useStore
+3. **Performance Issues**: Use selectors to prevent unnecessary re-renders
+4. **TypeScript Errors**: Ensure proper typing for store state and actions
+
+### Debug Tips
+
+```javascript
+// Enable store debugging in development
+if (process.env.NODE_ENV === 'development') {
+  // Log store changes
+  userStore.$subscribe((mutation, state) => {
+    console.log('User store changed:', mutation, state);
+  });
+}
+```
+
+## Next Steps
+
+Now that you have QuantaJS integrated with Next.js, explore:
+
+- [React Integration](/docs/guides/react-integration) - Advanced React patterns
+- [Tips and Examples](/docs/guides/tips-and-examples) - Best practices and patterns
+- [Examples](/docs/guides/examples) - Complete working examples
+- [API Reference](/docs/api) - Detailed API documentation
+
+QuantaJS provides a powerful, Vue.js-inspired state management experience that works seamlessly with Next.js and all its modern features. 

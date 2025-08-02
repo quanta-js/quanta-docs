@@ -1,44 +1,224 @@
 ---
 title: Watching State
-description: How to watch state changes in QuantaJS.
+description: Learn how to watch for state changes in QuantaJS.
 ---
 
 # Watching State
 
-The `watch` function lets you observe reactive state changes and run a callback when they occur.
+The `watch` function in QuantaJS allows you to react to state changes and execute side effects. It's perfect for logging, API calls, DOM updates, and other side effects that need to happen when state changes.
 
 ## Basic Usage
 
+Watch a single reactive value for changes:
+
 ```javascript
-import { reactive, watch } from "quantajs";
+import { reactive, watch } from '@quantajs/core';
 
-const state = reactive({ count: 0 });
+const state = reactive({
+  count: 0,
+  name: 'Quanta',
+});
 
-watch(
-  () => state.count,
-  (newValue) => console.log(`Count changed to: ${newValue}`),
-);
+// Watch for changes to count
+watch(() => state.count, (newValue, oldValue) => {
+  console.log(`Count changed from ${oldValue} to ${newValue}`);
+});
 
-state.count = 1; // Logs: "Count changed to: 1"
-state.count = 2; // Logs: "Count changed to: 2"
+// Watch for changes to name
+watch(() => state.name, (newValue) => {
+  console.log(`Name changed to: ${newValue}`);
+});
+
+state.count = 5; // Logs: "Count changed from 0 to 5"
+state.name = 'QuantaJS'; // Logs: "Name changed to: QuantaJS"
 ```
 
-## Watching Complex State
+## Watching Multiple Values
 
-You can watch derived values:
+Watch multiple reactive values in a single watcher:
 
 ```javascript
-const state = reactive({ a: 1, b: 2 });
+const user = reactive({
+  firstName: 'John',
+  lastName: 'Doe',
+  age: 25,
+});
 
-watch(
-  () => state.a + state.b,
-  (sum) => console.log(`Sum is now: ${sum}`),
-);
+// Watch multiple properties
+watch(() => `${user.firstName} ${user.lastName}`, (newFullName) => {
+  console.log(`Full name changed to: ${newFullName}`);
+});
 
-state.a = 3; // Logs: "Sum is now: 5"
-state.b = 4; // Logs: "Sum is now: 7"
+// Watch computed values
+watch(() => user.age >= 18, (isAdult) => {
+  console.log(`User is ${isAdult ? 'adult' : 'minor'}`);
+});
+
+user.firstName = 'Jane'; // Logs: "Full name changed to: Jane Doe"
+user.age = 16; // Logs: "User is minor"
+```
+
+## Watching Store State
+
+Watch for changes in store state:
+
+```javascript
+import { createStore } from '@quantajs/core';
+
+const todoStore = createStore('todos', {
+  state: () => ({
+    todos: [],
+    filter: 'all',
+  }),
+  actions: {
+    addTodo(text) {
+      this.todos.push({ id: Date.now(), text, done: false });
+    },
+    setFilter(filter) {
+      this.filter = filter;
+    },
+  },
+});
+
+// Watch the entire todos array
+watch(() => todoStore.todos, (newTodos) => {
+  console.log(`Todos updated: ${newTodos.length} items`);
+  localStorage.setItem('todos', JSON.stringify(newTodos));
+});
+
+// Watch specific computed values
+watch(() => todoStore.todos.filter(t => t.done).length, (completedCount) => {
+  console.log(`${completedCount} todos completed`);
+});
+
+todoStore.addTodo('Learn QuantaJS');
+todoStore.addTodo('Build an app');
+```
+
+## Side Effects with Watch
+
+Use watch for common side effects like API calls, DOM updates, and logging:
+
+```javascript
+const userStore = createStore('user', {
+  state: () => ({
+    user: null,
+    isLoading: false,
+  }),
+  actions: {
+    async fetchUser(id) {
+      this.isLoading = true;
+      try {
+        const response = await fetch(`/api/users/${id}`);
+        this.user = await response.json();
+      } catch (error) {
+        console.error('Failed to fetch user:', error);
+      } finally {
+        this.isLoading = false;
+      }
+    },
+  },
+});
+
+// Watch for user changes and update page title
+watch(() => userStore.user?.name, (userName) => {
+  if (userName) {
+    document.title = `Profile - ${userName}`;
+  } else {
+    document.title = 'User Profile';
+  }
+});
+
+// Watch for loading state changes
+watch(() => userStore.isLoading, (isLoading) => {
+  const spinner = document.getElementById('spinner');
+  if (spinner) {
+    spinner.style.display = isLoading ? 'block' : 'none';
+  }
+});
+
+// Watch for authentication state
+watch(() => !!userStore.user, (isAuthenticated) => {
+  if (isAuthenticated) {
+    console.log('User authenticated, redirecting to dashboard');
+    // router.push('/dashboard');
+  } else {
+    console.log('User logged out, redirecting to login');
+    // router.push('/login');
+  }
+});
+```
+
+## Watching Nested Objects
+
+Watch deeply nested object changes:
+
+```javascript
+const settings = reactive({
+  theme: {
+    mode: 'dark',
+    colors: {
+      primary: '#007bff',
+      secondary: '#6c757d',
+    },
+  },
+  notifications: {
+    email: true,
+    push: false,
+  },
+});
+
+// Watch specific nested properties
+watch(() => settings.theme.mode, (newMode) => {
+  document.body.setAttribute('data-theme', newMode);
+});
+
+// Watch multiple nested properties
+watch(() => ({
+  mode: settings.theme.mode,
+  primary: settings.theme.colors.primary,
+}), (newSettings) => {
+  console.log('Theme settings changed:', newSettings);
+});
+
+// Watch entire nested objects
+watch(() => settings.notifications, (newNotifications) => {
+  console.log('Notification settings updated:', newNotifications);
+}, { deep: true });
+
+settings.theme.mode = 'light';
+settings.theme.colors.primary = '#28a745';
+settings.notifications.push = true;
+```
+
+## Performance Considerations
+
+Watch can be expensive for large objects. Use specific selectors when possible:
+
+```javascript
+const largeStore = createStore('large', {
+  state: () => ({
+    items: Array.from({ length: 1000 }, (_, i) => ({ id: i, value: Math.random() })),
+    metadata: { /* large object */ },
+  }),
+});
+
+// Good: Watch specific values
+watch(() => largeStore.items.length, (count) => {
+  console.log(`Item count: ${count}`);
+});
+
+// Avoid: Watching entire large objects
+// watch(() => largeStore.items, (items) => { ... }); // Expensive!
+
+// Good: Watch computed summaries
+watch(() => largeStore.items.filter(item => item.value > 0.5).length, (count) => {
+  console.log(`${count} items above threshold`);
+});
 ```
 
 ## Learn More
 
-- Combine with [computed](/docs/guides/computed-values) for reactive derivations.
+- Understand [reactive state](/docs/guides/reactive-state) fundamentals
+- Use [computed values](/docs/guides/computed-values) for derived state
+- Explore [React integration](/docs/guides/react-integration) for React applications

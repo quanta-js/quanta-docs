@@ -6,28 +6,267 @@ description: API reference for the computed function.
 # Computed
 ## `computed`
 
-Creates a reactive computed property.
+Creates a reactive computed value that automatically updates when its dependencies change.
 
 ## Signature
 
 ```typescript
-function computed<T>(getter: () => T): { value: T };
+function computed<T>(getter: () => T): { readonly value: T };
 ```
 
 ## Parameters
 
-- `getter`: A function that computes the value based on reactive dependencies.
+- `getter`: A function that returns the computed value. This function is automatically tracked for dependencies.
 
 ## Returns
 
-- An `object` with a `value` property that updates reactively.
+An object with a readonly `value` property that contains the computed result.
 
-## Example
+## Basic Usage
 
 ```javascript
-const state = reactive({ count: 1 });
-const doubled = computed(() => state.count * 2);
-console.log(doubled.value); // 2
-state.count = 3;
-console.log(doubled.value); // 6
+import { reactive, computed } from '@quantajs/core';
+
+const state = reactive({
+  count: 0,
+  price: 10,
+});
+
+const doubleCount = computed(() => state.count * 2);
+const totalPrice = computed(() => state.count * state.price);
+
+console.log(doubleCount.value); // 0
+console.log(totalPrice.value); // 0
+
+state.count = 5;
+console.log(doubleCount.value); // 10
+console.log(totalPrice.value); // 50
 ```
+
+## Computed with Multiple Dependencies
+
+Computed values can depend on multiple reactive sources:
+
+```javascript
+const user = reactive({
+  firstName: 'John',
+  lastName: 'Doe',
+  age: 25,
+});
+
+const fullName = computed(() => `${user.firstName} ${user.lastName}`);
+const isAdult = computed(() => user.age >= 18);
+const greeting = computed(() => 
+  `Hello ${fullName.value}, you are ${isAdult.value ? 'an adult' : 'a minor'}`
+);
+
+console.log(greeting.value); // "Hello John Doe, you are an adult"
+
+user.firstName = 'Jane';
+console.log(greeting.value); // "Hello Jane Doe, you are an adult"
+
+user.age = 16;
+console.log(greeting.value); // "Hello Jane Doe, you are a minor"
+```
+
+## Computed with Complex Logic
+
+Computed values can handle complex calculations and transformations:
+
+```javascript
+const todoStore = reactive({
+  todos: [
+    { id: 1, text: 'Learn QuantaJS', done: false, priority: 'high' },
+    { id: 2, text: 'Build an app', done: true, priority: 'medium' },
+    { id: 3, text: 'Deploy', done: false, priority: 'low' },
+  ],
+  filter: 'all', // 'all', 'active', 'completed'
+});
+
+const filteredTodos = computed(() => {
+  switch (todoStore.filter) {
+    case 'active':
+      return todoStore.todos.filter(todo => !todo.done);
+    case 'completed':
+      return todoStore.todos.filter(todo => todo.done);
+    default:
+      return todoStore.todos;
+  }
+});
+
+const todoStats = computed(() => {
+  const todos = todoStore.todos;
+  const total = todos.length;
+  const completed = todos.filter(todo => todo.done).length;
+  const active = total - completed;
+  const completionRate = total === 0 ? 0 : (completed / total) * 100;
+  
+  return {
+    total,
+    completed,
+    active,
+    completionRate: Math.round(completionRate),
+  };
+});
+
+const highPriorityTodos = computed(() => 
+  todoStore.todos.filter(todo => todo.priority === 'high' && !todo.done)
+);
+
+console.log(filteredTodos.value.length); // 3
+console.log(todoStats.value); // { total: 3, completed: 1, active: 2, completionRate: 33 }
+console.log(highPriorityTodos.value.length); // 1
+```
+
+## Performance Benefits
+
+Computed values are cached and only recalculate when dependencies change:
+
+```javascript
+const expensiveStore = reactive({
+  items: Array.from({ length: 1000 }, (_, i) => ({ id: i, value: Math.random() })),
+});
+
+const expensiveCalculation = computed(() => {
+  console.log('Computing expensive value...');
+  return expensiveStore.items
+    .map(item => item.value * 2)
+    .reduce((sum, val) => sum + val, 0);
+});
+
+// First access - computes the value
+console.log(expensiveCalculation.value); // "Computing expensive value..." then result
+
+// Second access - uses cached value (no computation)
+console.log(expensiveCalculation.value); // Uses cached value
+
+// Only when items change does it recompute
+expensiveStore.items.push({ id: 1000, value: 0.5 });
+console.log(expensiveCalculation.value); // "Computing expensive value..." then new result
+```
+
+## Computed in Stores
+
+When using `createStore`, getters are automatically computed:
+
+```javascript
+import { createStore } from '@quantajs/core';
+
+const userStore = createStore('user', {
+  state: () => ({
+    users: [
+      { id: 1, name: 'Alice', age: 25, role: 'admin' },
+      { id: 2, name: 'Bob', age: 30, role: 'user' },
+      { id: 3, name: 'Charlie', age: 35, role: 'admin' },
+    ],
+    filter: {
+      minAge: 0,
+      maxAge: 100,
+      role: 'all',
+    },
+  }),
+  getters: {
+    filteredUsers: (state) => {
+      return state.users.filter(user => {
+        const ageMatch = user.age >= state.filter.minAge && user.age <= state.filter.maxAge;
+        const roleMatch = state.filter.role === 'all' || user.role === state.filter.role;
+        return ageMatch && roleMatch;
+      });
+    },
+    averageAge: (state) => {
+      if (state.users.length === 0) return 0;
+      const total = state.users.reduce((sum, user) => sum + user.age, 0);
+      return Math.round(total / state.users.length);
+    },
+    userStats: (state) => {
+      const admins = state.users.filter(user => user.role === 'admin').length;
+      const regularUsers = state.users.filter(user => user.role === 'user').length;
+      return { admins, regularUsers, total: state.users.length };
+    },
+  },
+  actions: {
+    updateFilter(filter) {
+      Object.assign(this.filter, filter);
+    },
+  },
+});
+
+console.log(userStore.filteredUsers.length); // 3
+console.log(userStore.averageAge); // 30
+console.log(userStore.userStats); // { admins: 2, regularUsers: 1, total: 3 }
+
+userStore.updateFilter({ minAge: 30, role: 'admin' });
+console.log(userStore.filteredUsers.length); // 1 (only Charlie)
+```
+
+## Chaining Computed Values
+
+Computed values can depend on other computed values:
+
+```javascript
+const store = reactive({
+  items: [1, 2, 3, 4, 5],
+});
+
+const sum = computed(() => store.items.reduce((a, b) => a + b, 0));
+const count = computed(() => store.items.length);
+const average = computed(() => count.value === 0 ? 0 : sum.value / count.value);
+const variance = computed(() => {
+  if (count.value === 0) return 0;
+  const avg = average.value;
+  const squaredDiffs = store.items.map(item => Math.pow(item - avg, 2));
+  return squaredDiffs.reduce((a, b) => a + b, 0) / count.value;
+});
+
+console.log(sum.value); // 15
+console.log(average.value); // 3
+console.log(variance.value); // 2
+
+store.items.push(6);
+console.log(sum.value); // 21
+console.log(average.value); // 3.5
+console.log(variance.value); // 2.916...
+```
+
+## Limitations
+
+### Side Effects
+
+Computed values should be pure functions without side effects:
+
+```javascript
+// ❌ Bad: Side effects in computed
+const badComputed = computed(() => {
+  console.log('This should not be in computed');
+  document.title = 'Updated'; // Side effect
+  return state.count * 2;
+});
+
+// ✅ Good: Pure computation
+const goodComputed = computed(() => state.count * 2);
+```
+
+### Async Operations
+
+Computed values cannot be async. Use watchers for async operations:
+
+```javascript
+// ❌ Bad: Async computed
+const badComputed = computed(async () => {
+  const result = await fetch('/api/data');
+  return result.json();
+});
+
+// ✅ Good: Use watch for async operations
+watch(() => state.id, async (id) => {
+  const result = await fetch(`/api/users/${id}`);
+  state.userData = await result.json();
+});
+```
+
+## Learn More
+
+- [Computed Values Guide](/docs/guides/computed-values) - Understanding computed values
+- [Reactive State](/docs/guides/reactive-state) - Reactive fundamentals
+- [Watching State](/docs/guides/watching-state) - Side effects
+- [React Integration](/docs/guides/react-integration) - React applications

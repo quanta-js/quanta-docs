@@ -1,0 +1,675 @@
+---
+title: Tips and Examples
+description: Practical tips and examples for using QuantaJS effectively in your applications.
+---
+
+# Tips and Examples
+
+This guide provides practical tips, patterns, and examples to help you use QuantaJS effectively in both core JavaScript and React applications.
+
+## Core Package Tips
+
+### 1. Store Organization Patterns
+
+#### Single Store for Small Apps
+
+```javascript
+import { createStore } from '@quantajs/core';
+
+const appStore = createStore('app', {
+  state: () => ({
+    user: null,
+    todos: [],
+    settings: { theme: 'light', notifications: true },
+    ui: { isLoading: false, sidebarOpen: false },
+  }),
+  getters: {
+    isAuthenticated: (state) => !!state.user,
+    completedTodos: (state) => state.todos.filter(todo => todo.done),
+    pendingTodos: (state) => state.todos.filter(todo => !todo.done),
+  },
+  actions: {
+    async login(credentials) {
+      this.ui.isLoading = true;
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          body: JSON.stringify(credentials),
+        });
+        this.user = await response.json();
+      } catch (error) {
+        console.error('Login failed:', error);
+      } finally {
+        this.ui.isLoading = false;
+      }
+    },
+    addTodo(text) {
+      this.todos.push({
+        id: Date.now(),
+        text,
+        done: false,
+        createdAt: new Date(),
+      });
+    },
+    toggleTheme() {
+      this.settings.theme = this.settings.theme === 'light' ? 'dark' : 'light';
+    },
+  },
+});
+```
+
+#### Multiple Stores for Large Apps
+
+```javascript
+// User store
+const userStore = createStore('user', {
+  state: () => ({
+    user: null,
+    isLoading: false,
+    error: null,
+  }),
+  getters: {
+    isAuthenticated: (state) => !!state.user,
+    userRole: (state) => state.user?.role || 'guest',
+  },
+  actions: {
+    async login(credentials) {
+      this.isLoading = true;
+      this.error = null;
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          body: JSON.stringify(credentials),
+        });
+        this.user = await response.json();
+      } catch (error) {
+        this.error = error.message;
+      } finally {
+        this.isLoading = false;
+      }
+    },
+    logout() {
+      this.user = null;
+      this.error = null;
+    },
+  },
+});
+
+// Todo store
+const todoStore = createStore('todos', {
+  state: () => ({
+    todos: [],
+    filter: 'all',
+    isLoading: false,
+  }),
+  getters: {
+    filteredTodos: (state) => {
+      switch (state.filter) {
+        case 'active':
+          return state.todos.filter(todo => !todo.done);
+        case 'completed':
+          return state.todos.filter(todo => todo.done);
+        default:
+          return state.todos;
+      }
+    },
+    completedCount: (state) => state.todos.filter(todo => todo.done).length,
+  },
+  actions: {
+    async fetchTodos() {
+      this.isLoading = true;
+      try {
+        const response = await fetch('/api/todos');
+        this.todos = await response.json();
+      } catch (error) {
+        console.error('Failed to fetch todos:', error);
+      } finally {
+        this.isLoading = false;
+      }
+    },
+    addTodo(text) {
+      this.todos.push({
+        id: Date.now(),
+        text,
+        done: false,
+      });
+    },
+  },
+});
+```
+
+### 2. Performance Optimization
+
+#### Selective Watching
+
+```javascript
+import { watch } from '@quantajs/core';
+
+// Good: Watch specific values
+watch(() => todoStore.todos.length, (count) => {
+  console.log(`Todo count: ${count}`);
+});
+
+// Avoid: Watching entire large objects
+// watch(() => todoStore.todos, (todos) => { ... }); // Expensive!
+
+// Good: Watch computed summaries
+watch(() => todoStore.todos.filter(todo => todo.done).length, (count) => {
+  console.log(`${count} todos completed`);
+});
+```
+
+#### Computed Caching
+
+```javascript
+import { computed } from '@quantajs/core';
+
+const expensiveStore = createStore('expensive', {
+  state: () => ({
+    items: Array.from({ length: 1000 }, (_, i) => ({ id: i, value: Math.random() })),
+  }),
+  getters: {
+    // This expensive calculation only runs when items change
+    expensiveCalculation: (state) => {
+      console.log('Computing expensive value...');
+      return state.items
+        .map(item => item.value * 2)
+        .reduce((sum, val) => sum + val, 0);
+    },
+  },
+});
+
+// First access - computes the value
+console.log(expensiveStore.expensiveCalculation);
+
+// Second access - uses cached value (no computation)
+console.log(expensiveStore.expensiveCalculation);
+
+// Only when items change does it recompute
+expensiveStore.items.push({ id: 1000, value: 0.5 });
+console.log(expensiveStore.expensiveCalculation); // Recomputes
+```
+
+### 3. Error Handling Patterns
+
+```javascript
+const errorStore = createStore('errors', {
+  state: () => ({
+    errors: [],
+    globalError: null,
+  }),
+  actions: {
+    addError(error, context = '') {
+      const errorInfo = {
+        id: Date.now(),
+        message: error.message || error,
+        context,
+        timestamp: new Date(),
+        stack: error.stack,
+      };
+      
+      this.errors.push(errorInfo);
+      this.globalError = errorInfo;
+      
+      // Log to external service
+      this.logError(errorInfo);
+    },
+    
+    clearError(id) {
+      this.errors = this.errors.filter(e => e.id !== id);
+      if (this.globalError?.id === id) {
+        this.globalError = null;
+      }
+    },
+    
+    async logError(errorInfo) {
+      try {
+        await fetch('/api/errors', {
+          method: 'POST',
+          body: JSON.stringify(errorInfo),
+        });
+      } catch (error) {
+        console.error('Failed to log error:', error);
+      }
+    },
+  },
+});
+
+// Use in other stores
+const userStore = createStore('user', {
+  state: () => ({ user: null }),
+  actions: {
+    async login(credentials) {
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          body: JSON.stringify(credentials),
+        });
+        
+        if (!response.ok) {
+          throw new Error('Login failed');
+        }
+        
+        this.user = await response.json();
+      } catch (error) {
+        errorStore.addError(error, 'user.login');
+      }
+    },
+  },
+});
+```
+
+## React Package Tips
+
+### 1. Provider Pattern (Recommended)
+
+```javascript
+import { createStore, QuantaProvider, useStore } from '@quantajs/react';
+
+const counterStore = createStore('counter', {
+  state: () => ({ count: 0 }),
+  getters: {
+    doubleCount: (state) => state.count * 2,
+  },
+  actions: {
+    increment() { this.count++; },
+    decrement() { this.count--; },
+  },
+});
+
+function App() {
+  return (
+    <QuantaProvider store={counterStore}>
+      <Counter />
+    </QuantaProvider>
+  );
+}
+
+function Counter() {
+  const store = useStore();
+  
+  return (
+    <div>
+      <p>Count: {store.count}</p>
+      <p>Double: {store.doubleCount}</p>
+      <button onClick={() => store.increment()}>+</button>
+      <button onClick={() => store.decrement()}>-</button>
+    </div>
+  );
+}
+```
+
+### 2. Performance Optimization with Selectors
+
+```javascript
+import { useQuantaStore } from '@quantajs/react';
+
+function TodoList() {
+  // Only re-render when todos change
+  const todos = useQuantaStore(todoStore, store => store.filteredTodos);
+  
+  return (
+    <ul>
+      {todos.map(todo => (
+        <TodoItem key={todo.id} todo={todo} />
+      ))}
+    </ul>
+  );
+}
+
+function TodoStats() {
+  // Only re-render when counts change
+  const stats = useQuantaStore(todoStore, store => ({
+    completed: store.completedCount,
+    pending: store.pendingCount,
+  }));
+  
+  return (
+    <div>
+      <p>Completed: {stats.completed}</p>
+      <p>Pending: {stats.pending}</p>
+    </div>
+  );
+}
+
+function ExpensiveComponent() {
+  // Only re-render when specific values change
+  const expensiveValue = useQuantaStore(store, store => 
+    store.items
+      .filter(item => item.active)
+      .map(item => item.value)
+      .reduce((sum, val) => sum + val, 0)
+  );
+  
+  return <div>Expensive calculation: {expensiveValue}</div>;
+}
+```
+
+### 3. Component-Scoped Stores
+
+```javascript
+import { useCreateStore } from '@quantajs/react';
+
+function TodoComponent() {
+  const todoStore = useCreateStore(
+    'todos',
+    () => ({ todos: [] }),
+    {
+      activeCount: (state) => state.todos.filter(todo => !todo.done).length,
+    },
+    {
+      addTodo(text) {
+        this.todos.push({ id: Date.now(), text, done: false });
+      },
+      toggleTodo(id) {
+        const todo = this.todos.find(t => t.id === id);
+        if (todo) todo.done = !todo.done;
+      },
+    }
+  );
+
+  return (
+    <div>
+      <button onClick={() => todoStore.addTodo('New task')}>
+        Add Todo
+      </button>
+      <p>Todos: {todoStore.todos.length}</p>
+      <p>Active: {todoStore.activeCount}</p>
+    </div>
+  );
+}
+```
+
+### 4. Multiple Stores with Context
+
+```javascript
+import { createStore, QuantaProvider, useStore } from '@quantajs/react';
+
+const userStore = createStore('user', {
+  state: () => ({ user: null, isLoading: false }),
+  actions: {
+    async login(credentials) {
+      this.isLoading = true;
+      // API call...
+      this.user = userData;
+      this.isLoading = false;
+    },
+  },
+});
+
+const todoStore = createStore('todos', {
+  state: () => ({ todos: [] }),
+  actions: {
+    addTodo(text) {
+      this.todos.push({ id: Date.now(), text, done: false });
+    },
+  },
+});
+
+function App() {
+  return (
+    <QuantaProvider store={userStore}>
+      <QuantaProvider store={todoStore}>
+        <UserDashboard />
+      </QuantaProvider>
+    </QuantaProvider>
+  );
+}
+
+function UserDashboard() {
+  const userStore = useStore();
+  const todoStore = useStore();
+  
+  return (
+    <div>
+      <UserInfo />
+      <TodoList />
+    </div>
+  );
+}
+```
+
+### 5. Custom Hooks for Store Logic
+
+```javascript
+function useUser() {
+  const store = useStore();
+  
+  return {
+    user: store.user,
+    isLoading: store.isLoading,
+    login: store.login,
+    logout: store.logout,
+    isAuthenticated: !!store.user,
+  };
+}
+
+function useTodos() {
+  const store = useStore();
+  
+  return {
+    todos: store.todos,
+    addTodo: store.addTodo,
+    toggleTodo: store.toggleTodo,
+    removeTodo: store.removeTodo,
+    completedCount: store.todos.filter(t => t.done).length,
+  };
+}
+
+function UserProfile() {
+  const { user, isAuthenticated, login } = useUser();
+  
+  if (!isAuthenticated) {
+    return <LoginForm onLogin={login} />;
+  }
+  
+  return (
+    <div>
+      <h1>{user.name}</h1>
+      <TodoManager />
+    </div>
+  );
+}
+
+function TodoManager() {
+  const { todos, addTodo, completedCount } = useTodos();
+  
+  return (
+    <div>
+      <p>Completed: {completedCount}/{todos.length}</p>
+      <AddTodoForm onAdd={addTodo} />
+      <TodoList todos={todos} />
+    </div>
+  );
+}
+```
+
+## Advanced Patterns
+
+### 1. Form Handling
+
+```javascript
+const formStore = createStore('form', {
+  state: () => ({
+    fields: {
+      name: '',
+      email: '',
+      password: '',
+    },
+    errors: {},
+    isSubmitting: false,
+  }),
+  getters: {
+    isValid: (state) => {
+      return state.fields.name && 
+             state.fields.email && 
+             state.fields.password &&
+             Object.keys(state.errors).length === 0;
+    },
+  },
+  actions: {
+    updateField(field, value) {
+      this.fields[field] = value;
+      this.validateField(field, value);
+    },
+    
+    validateField(field, value) {
+      const errors = {};
+      
+      if (field === 'email' && value && !value.includes('@')) {
+        errors.email = 'Invalid email format';
+      }
+      
+      if (field === 'password' && value && value.length < 6) {
+        errors.password = 'Password must be at least 6 characters';
+      }
+      
+      this.errors = { ...this.errors, ...errors };
+    },
+    
+    async submit() {
+      if (!this.isValid) return;
+      
+      this.isSubmitting = true;
+      try {
+        const response = await fetch('/api/register', {
+          method: 'POST',
+          body: JSON.stringify(this.fields),
+        });
+        
+        if (!response.ok) {
+          throw new Error('Registration failed');
+        }
+        
+        // Handle success
+      } catch (error) {
+        console.error('Registration failed:', error);
+      } finally {
+        this.isSubmitting = false;
+      }
+    },
+  },
+});
+```
+
+### 2. Real-time Updates with WebSocket
+
+```javascript
+const chatStore = createStore('chat', {
+  state: () => ({
+    messages: [],
+    isConnected: false,
+    socket: null,
+  }),
+  actions: {
+    connect() {
+      this.socket = new WebSocket('ws://localhost:8080/chat');
+      
+      this.socket.onopen = () => {
+        this.isConnected = true;
+      };
+      
+      this.socket.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        this.messages.push(message);
+      };
+      
+      this.socket.onclose = () => {
+        this.isConnected = false;
+      };
+    },
+    
+    sendMessage(text) {
+      if (this.socket && this.isConnected) {
+        this.socket.send(JSON.stringify({ text, timestamp: Date.now() }));
+      }
+    },
+    
+    disconnect() {
+      if (this.socket) {
+        this.socket.close();
+        this.socket = null;
+      }
+    },
+  },
+});
+```
+
+### 3. Local Storage Synchronization
+
+```javascript
+const settingsStore = createStore('settings', {
+  state: () => ({
+    theme: 'light',
+    language: 'en',
+    notifications: { email: true, push: false },
+  }),
+  actions: {
+    initialize() {
+      // Load from localStorage
+      const savedTheme = localStorage.getItem('theme');
+      const savedLanguage = localStorage.getItem('language');
+      const savedNotifications = localStorage.getItem('notifications');
+      
+      if (savedTheme) this.theme = savedTheme;
+      if (savedLanguage) this.language = savedLanguage;
+      if (savedNotifications) {
+        try {
+          this.notifications = JSON.parse(savedNotifications);
+        } catch (error) {
+          console.error('Failed to parse saved notifications:', error);
+        }
+      }
+    },
+    
+    updateTheme(theme) {
+      this.theme = theme;
+      localStorage.setItem('theme', theme);
+    },
+    
+    updateLanguage(language) {
+      this.language = language;
+      localStorage.setItem('language', language);
+    },
+    
+    updateNotifications(notifications) {
+      this.notifications = { ...this.notifications, ...notifications };
+      localStorage.setItem('notifications', JSON.stringify(this.notifications));
+    },
+  },
+});
+
+// Initialize on app start
+settingsStore.initialize();
+```
+
+## Best Practices Summary
+
+### Core Package
+1. **Use descriptive store names** - Make them unique and meaningful
+2. **Keep actions focused** - Each action should do one thing well
+3. **Leverage getters** - Use computed values for derived state
+4. **Handle errors gracefully** - Always provide error handling in async actions
+5. **Use watchers sparingly** - Prefer computed values when possible
+
+### React Package
+1. **Use selectors for performance** - Prevent unnecessary re-renders
+2. **Prefer QuantaProvider** - For app-level state management
+3. **Use component stores** - For local state that doesn't need sharing
+4. **Create custom hooks** - Encapsulate store logic for reusability
+5. **Keep it simple** - Don't over-engineer your state management
+
+### General
+1. **Start simple** - Begin with a single store and split as needed
+2. **Test your stores** - Write unit tests for store logic
+3. **Document your stores** - Use TypeScript interfaces for better documentation
+4. **Monitor performance** - Use React DevTools and browser profilers
+5. **Follow conventions** - Be consistent with naming and structure
+
+## Learn More
+
+- [Reactive State](/docs/guides/reactive-state) - Understanding reactivity
+- [Computed Values](/docs/guides/computed-values) - Derived state
+- [Watching State](/docs/guides/watching-state) - Side effects
+- [React Integration](/docs/guides/react-integration) - React applications
+- [Managing Stores](/docs/guides/managing-stores) - Store management patterns 

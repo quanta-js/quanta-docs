@@ -39,6 +39,24 @@ export const ROUTES: EachRoute[] = [
         ],
     },
     {
+        title: "Integration",
+        href: "/integration",
+        noLink: true,
+        items: [
+            { title: "React Integration", href: "/react-integration", tag: "New!" },
+            { title: "Next.js Integration", href: "/nextjs-integration", tag: "New!" },
+        ],
+    },
+    {
+        title: "Best Practices",
+        href: "/best-practices",
+        noLink: true,
+        items: [
+            { title: "Tips and Examples", href: "/tips-and-examples", tag: "New!" },
+            { title: "Examples", href: "/examples", tag: "New!" },
+        ],
+    },
+    {
         title: "API Reference",
         href: "/api",
         noLink: true,
@@ -53,11 +71,11 @@ export const ROUTES: EachRoute[] = [
         title: "Contributing",
         href: "/contributing",
     },
-    {
-        title: "Changelog",
-        href: "/changelog",
-        tag: "Updated",
-    },
+    // {
+    //     title: "Roadmap",
+    //     href: "/roadmap",
+    //     tag: "Coming Soon",
+    // },
 ];
 
 type Page = { title: string; href: string };

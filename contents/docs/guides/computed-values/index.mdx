@@ -1,59 +1,169 @@
 ---
 title: Computed Values
-description: How to create computed properties with QuantaJS.
+description: Learn how to use computed values in QuantaJS.
 ---
 
 # Computed Values
 
-The `computed` function creates reactive computed properties that automatically update when their dependencies change.
+Computed values in QuantaJS are reactive derived state that automatically update when their dependencies change. They're perfect for calculations, filtering, and transforming data.
 
-## Basic Usage
+## Creating Computed Values
 
-```javascript
-import { reactive, computed } from "quantajs";
-
-const state = reactive({ count: 1 });
-const doubled = computed(() => state.count * 2);
-
-console.log(doubled.value); // 2
-state.count = 3;
-console.log(doubled.value); // 6
-```
-
-## Lazy Evaluation
-
-Computed values are lazily evaluated and cached until their dependencies change:
+Use the `computed` function to create reactive computed values:
 
 ```javascript
-const expensiveCalc = computed(() => {
-  console.log("Calculating...");
-  return state.count * 100;
+import { reactive, computed } from '@quantajs/core';
+
+const state = reactive({
+  count: 0,
+  price: 10,
 });
 
-console.log(expensiveCalc.value); // "Calculating..." then 300
-console.log(expensiveCalc.value); // 300 (cached, no recalculation)
-state.count = 4;
-console.log(expensiveCalc.value); // "Calculating..." then 400
+const doubleCount = computed(() => state.count * 2);
+const totalPrice = computed(() => state.count * state.price);
+
+console.log(doubleCount.value); // 0
+console.log(totalPrice.value); // 0
+
+state.count = 5;
+console.log(doubleCount.value); // 10
+console.log(totalPrice.value); // 50
 ```
 
-## With Stores
+## Computed Values in Stores
 
-Computed values integrate seamlessly with createStore:
+Stores have built-in support for computed values through getters:
 
 ```javascript
-import { createStore } from "quantajs";
+import { createStore } from '@quantajs/core';
 
-const store = createStore({
-  state: { count: 1 },
+const todoStore = createStore('todos', {
+  state: () => ({
+    todos: [
+      { id: 1, text: 'Learn QuantaJS', done: false },
+      { id: 2, text: 'Build an app', done: true },
+      { id: 3, text: 'Deploy', done: false },
+    ],
+  }),
   getters: {
-    doubled: (state) => state.count * 2,
+    totalTodos: (state) => state.todos.length,
+    completedTodos: (state) => state.todos.filter(todo => todo.done),
+    pendingTodos: (state) => state.todos.filter(todo => !todo.done),
+    completionRate: (state) => {
+      if (state.todos.length === 0) return 0;
+      return (state.todos.filter(todo => todo.done).length / state.todos.length) * 100;
+    },
+  },
+  actions: {
+    addTodo(text) {
+      this.todos.push({
+        id: Date.now(),
+        text,
+        done: false,
+      });
+    },
+    toggleTodo(id) {
+      const todo = this.todos.find(t => t.id === id);
+      if (todo) todo.done = !todo.done;
+    },
   },
 });
 
-console.log(store.doubled); // 2
-store.count = 3;
-console.log(store.doubled); // 6
+console.log(todoStore.totalTodos); // 3
+console.log(todoStore.completedTodos.length); // 1
+console.log(todoStore.pendingTodos.length); // 2
+console.log(todoStore.completionRate); // 33.33...
+
+todoStore.addTodo('New task');
+console.log(todoStore.totalTodos); // 4
+console.log(todoStore.completionRate); // 25...
+```
+
+## Complex Computations
+
+Computed values can handle complex logic and multiple dependencies:
+
+```javascript
+const userStore = createStore('user', {
+  state: () => ({
+    users: [
+      { id: 1, name: 'Alice', age: 25, role: 'admin' },
+      { id: 2, name: 'Bob', age: 30, role: 'user' },
+      { id: 3, name: 'Charlie', age: 35, role: 'admin' },
+    ],
+    filter: {
+      minAge: 0,
+      maxAge: 100,
+      role: 'all',
+    },
+  }),
+  getters: {
+    filteredUsers: (state) => {
+      return state.users.filter(user => {
+        const ageMatch = user.age >= state.filter.minAge && user.age <= state.filter.maxAge;
+        const roleMatch = state.filter.role === 'all' || user.role === state.filter.role;
+        return ageMatch && roleMatch;
+      });
+    },
+    averageAge: (state) => {
+      if (state.users.length === 0) return 0;
+      const total = state.users.reduce((sum, user) => sum + user.age, 0);
+      return Math.round(total / state.users.length);
+    },
+    userStats: (state) => {
+      const admins = state.users.filter(user => user.role === 'admin').length;
+      const regularUsers = state.users.filter(user => user.role === 'user').length;
+      return { admins, regularUsers, total: state.users.length };
+    },
+  },
+  actions: {
+    updateFilter(filter) {
+      Object.assign(this.filter, filter);
+    },
+  },
+});
+
+console.log(userStore.filteredUsers.length); // 3
+console.log(userStore.averageAge); // 30
+console.log(userStore.userStats); // { admins: 2, regularUsers: 1, total: 3 }
+
+userStore.updateFilter({ minAge: 30, role: 'admin' });
+console.log(userStore.filteredUsers.length); // 1 (only Charlie)
+```
+
+## Performance Benefits
+
+Computed values are cached and only recalculate when dependencies change:
+
+```javascript
+const expensiveStore = createStore('expensive', {
+  state: () => ({
+    items: Array.from({ length: 1000 }, (_, i) => ({ id: i, value: Math.random() })),
+  }),
+  getters: {
+    // This expensive calculation only runs when items change
+    expensiveCalculation: (state) => {
+      console.log('Computing expensive value...');
+      return state.items
+        .map(item => item.value * 2)
+        .reduce((sum, val) => sum + val, 0);
+    },
+  },
+});
+
+// First access - computes the value
+console.log(expensiveStore.expensiveCalculation);
+
+// Second access - uses cached value (no computation)
+console.log(expensiveStore.expensiveCalculation);
+
+// Only when items change does it recompute
+expensiveStore.items.push({ id: 1000, value: 0.5 });
+console.log(expensiveStore.expensiveCalculation); // Recomputes
 ```
 
 ## Learn More
-- Track changes with [watch](/docs/guides/waching-state).
+
+- Understand [reactive state](/docs/guides/reactive-state) fundamentals
+- Monitor changes with [watch](/docs/guides/watching-state)
+- Explore [React integration](/docs/guides/react-integration) for React applications

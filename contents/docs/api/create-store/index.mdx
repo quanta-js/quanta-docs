@@ -22,11 +22,12 @@ function createStore<S, G, A>(
 ```
 
 ## Parameters
-- `name`: A unique string identifier for the store.
+
+- `name`: A unique string identifier for the store. Must be unique across your application.
 - `options`:
   - `state`: A function returning the initial state object.
-  - `getters` (optional): An object of getter functions.
-  - `actions` (optional): An object of action methods.
+  - `getters` (optional): An object of getter functions that compute derived state.
+  - `actions` (optional): An object of action methods that can modify state.
 
 ## Returns
 
@@ -35,9 +36,75 @@ A `StoreInstance` with flattened access to state, getters, and actions.
 ## Example
 
 ```javascript
-const store = createStore("counter", {
+import { createStore } from '@quantajs/core';
+
+const store = createStore('counter', {
   state: () => ({ count: 0 }),
-  getters: { doubled: (state) => state.count * 2 },
-  actions: { increment() { this.count++; } },
+  getters: { 
+    doubled: (state) => state.count * 2 
+  },
+  actions: { 
+    increment() { this.count++; } 
+  },
+});
+
+console.log(store.count); // 0
+console.log(store.doubled); // 0
+store.increment();
+console.log(store.count); // 1
+console.log(store.doubled); // 2
+```
+
+## Store Structure
+
+The returned store instance provides:
+
+- **State Properties**: Direct access to all state properties
+- **Getters**: Computed values that automatically update when dependencies change
+- **Actions**: Methods that can modify state using `this`
+- **subscribe**: Method to subscribe to store changes
+
+## TypeScript Support
+
+```typescript
+interface CounterState {
+  count: number;
+  name: string;
+}
+
+interface CounterGetters {
+  doubled: number;
+  greeting: string;
+}
+
+interface CounterActions {
+  increment(): void;
+  decrement(): void;
+  setName(name: string): void;
+}
+
+const counterStore = createStore<CounterState, CounterGetters, CounterActions>('counter', {
+  state: () => ({ count: 0, name: 'Counter' }),
+  getters: {
+    doubled: (state) => state.count * 2,
+    greeting: (state) => `Hello ${state.name}!`,
+  },
+  actions: {
+    increment() { this.count++; },
+    decrement() { this.count--; },
+    setName(name: string) { this.name = name; },
+  },
 });
 ```
+
+## Error Handling
+
+- **Duplicate Store Names**: Throws an error if a store with the same name already exists
+- **Invalid State**: State must be a function that returns an object
+- **Action Context**: Actions must use `this` to access store properties
+
+## Learn More
+
+- [Reactive State](/docs/guides/reactive-state) - Understanding reactivity
+- [Computed Values](/docs/guides/computed-values) - Using getters
+- [Managing Stores](/docs/guides/managing-stores) - Store management patterns

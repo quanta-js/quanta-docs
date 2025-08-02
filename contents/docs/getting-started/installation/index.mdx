@@ -5,16 +5,78 @@ description: How to install QuantaJS in your project.
 
 # Installation
 
-Get started with QuantaJS by installing it via npm. Since QuantaJS is framework-agnostic, it works in any JavaScript environment.
+Get started with QuantaJS by installing the appropriate package for your needs. QuantaJS is available as two separate packages to give you exactly what you need.
 
 ## Prerequisites
 
 - Node.js (v14 or higher)
-- npm (v6 or higher)
+- npm (v6 or higher), yarn, or pnpm
 
-## Install via npm
+## Package Options
 
-Run the following command to install QuantaJS:
+### @quantajs/core
+For framework-agnostic state management in any JavaScript environment.
 
 ```bash
-npm i @quantajs/core
+npm install @quantajs/core
+# or
+yarn add @quantajs/core
+# or
+pnpm add @quantajs/core
+```
+
+### @quantajs/react
+For React applications with built-in hooks and components.
+
+```bash
+npm install @quantajs/react @quantajs/core
+# or
+yarn add @quantajs/react @quantajs/core
+# or
+pnpm add @quantajs/react @quantajs/core
+```
+
+<Callout type="info">
+@quantajs/react depends on @quantajs/core, so both packages will be installed when you install the React package.
+</Callout>
+
+## Usage Examples
+
+### Core Package
+```javascript
+import { createStore, reactive, computed, watch } from '@quantajs/core';
+
+// Create a store
+const counter = createStore('counter', {
+  state: () => ({ count: 0 }),
+  actions: { increment() { this.count++; } },
+});
+```
+
+### React Package
+```javascript
+import { createStore, QuantaProvider, useStore } from '@quantajs/react';
+
+// Create a store
+const counterStore = createStore('counter', {
+  state: () => ({ count: 0 }),
+  actions: { increment() { this.count++; } },
+});
+
+// Use in React components
+function Counter() {
+  const store = useStore();
+  return (
+    <div>
+      <p>Count: {store.count}</p>
+      <button onClick={() => store.increment()}>Increment</button>
+    </div>
+  );
+}
+```
+
+## Next Steps
+
+- [Quick Start Guide](/docs/getting-started/quick-start-guide) - Learn the basics
+- [Core Concepts](/docs/guides/reactive-state) - Understand reactive state
+- [React Integration](/docs/guides/react-integration) - Build React applications

@@ -15,7 +15,7 @@ export function Footer() {
         <div className="flex items-center gap-3 font-jura-regular">
           <Image className="rounded-md" width={42} height={42} src={resolvedTheme == 'dark' ? "/img/q_logo_dark.svg" : "/img/q_logo_light.svg"} alt="QuantaJS logo for JavaScript library" />
           <p>
-            Crafted with passion by the QuantaJS crew. Unleash the source magic on <a href="https://github.com/quanta-js/quanta">GitHub</a>—your star fuels the journey!
+            Crafted with passion by the QuantaJS crew. Unleash the source magic on <a href="https://github.com/quanta-js/quanta">GitHub</a>, your star fuels the journey!
           </p>
         </div>
 

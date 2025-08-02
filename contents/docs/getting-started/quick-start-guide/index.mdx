@@ -5,17 +5,20 @@ description: A simple example to get started with QuantaJS.
 
 # Quick Start
 
-Let’s jump into using QuantaJS with a simple counter example.
+Let's jump into using QuantaJS with simple examples for both core and React usage.
 
-## Example: Counter Store
+## Core Package Example
 
-Here’s how to create a reactive counter using `createStore`:
+Here's how to create a reactive counter using `createStore` from the core package:
 
 ```javascript
-import { createStore } from "quantajs";
+import { createStore } from '@quantajs/core';
 
-const counter = createStore({
-  state: { count: 0 },
+const counter = createStore('counter', {
+  state: () => ({ count: 0 }),
+  getters: {
+    doubleCount: (state) => state.count * 2,
+  },
   actions: {
     increment() {
       this.count++;
@@ -28,23 +31,97 @@ const counter = createStore({
 
 // Access state
 console.log(counter.count); // 0
+console.log(counter.doubleCount); // 0
 
 // Update state
 counter.increment();
 console.log(counter.count); // 1
+console.log(counter.doubleCount); // 2
 
 counter.decrement();
 console.log(counter.count); // 0
+console.log(counter.doubleCount); // 0
 ```
 
-## What’s Happening?
-- `createStore` creates a reactive store with a `state` object and `actions`.
-- The `state` is made reactive, so changes trigger updates automatically.
-- Actions like `increment` and `decrement` modify the state directly using `this`.
+## React Package Example
+
+For React applications, use the React package with hooks and components:
+
+```javascript
+import { createStore, QuantaProvider, useStore } from '@quantajs/react';
+
+const counterStore = createStore('counter', {
+  state: () => ({ count: 0 }),
+  getters: {
+    doubleCount: (state) => state.count * 2,
+  },
+  actions: {
+    increment() {
+      this.count++;
+    },
+    decrement() {
+      this.count--;
+    },
+  },
+});
+
+function Counter() {
+  const store = useStore();
+  
+  return (
+    <div>
+      <p>Count: {store.count}</p>
+      <p>Double: {store.doubleCount}</p>
+      <button onClick={() => store.increment()}>+</button>
+      <button onClick={() => store.decrement()}>-</button>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <QuantaProvider store={counterStore}>
+      <Counter />
+    </QuantaProvider>
+  );
+}
+```
+
+## What's Happening?
+
+### Core Package
+- `createStore` creates a reactive store with a unique name, state function, getters, and actions
+- The `state` function returns the initial state object
+- `getters` are computed values that automatically update when dependencies change
+- Actions like `increment` and `decrement` modify the state directly using `this`
+- All state changes trigger automatic reactivity
+
+### React Package
+- Same store creation API as core package
+- `QuantaProvider` wraps your app to provide the store to all child components
+- `useStore` hook accesses the store from context and triggers re-renders when state changes
+- Components automatically re-render when store state updates
+
+## Performance Optimization
+
+For React applications, you can use selectors to prevent unnecessary re-renders:
+
+```javascript
+import { useQuantaStore } from '@quantajs/react';
+
+function CounterDisplay() {
+  // Only re-render when count changes
+  const count = useQuantaStore(counterStore, store => store.count);
+  
+  return <p>Count: {count}</p>;
+}
+```
 
 ## Next Steps
+
 ### Explore more features:
 
-- [Reactive State](/docs/guides/reactive-state)
-- [Computed Values](/docs/guides/computed-values)
-- [Watching State](/docs/guides/watching-state)
+- [Reactive State](/docs/guides/reactive-state) - Understanding reactivity
+- [Computed Values](/docs/guides/computed-values) - Derived state
+- [Watching State](/docs/guides/watching-state) - Side effects
+- [React Integration](/docs/guides/react-integration) - React-specific features

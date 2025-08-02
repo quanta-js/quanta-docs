@@ -1,0 +1,1105 @@
+---
+title: Examples
+description: Complete, working examples demonstrating QuantaJS usage patterns.
+---
+
+# Examples
+
+This section provides complete, working examples that demonstrate real-world usage patterns for QuantaJS. Each example is designed to be copy-paste ready and showcases best practices.
+
+## Core Package Examples
+
+### 1. Todo Application
+
+A complete todo application demonstrating store organization, computed values, and side effects.
+
+```javascript
+import { createStore, watch } from '@quantajs/core';
+
+// Todo store with full CRUD operations
+const todoStore = createStore('todos', {
+  state: () => ({
+    todos: [],
+    filter: 'all', // 'all', 'active', 'completed'
+    isLoading: false,
+    error: null,
+  }),
+  getters: {
+    filteredTodos: (state) => {
+      switch (state.filter) {
+        case 'active':
+          return state.todos.filter(todo => !todo.done);
+        case 'completed':
+          return state.todos.filter(todo => todo.done);
+        default:
+          return state.todos;
+      }
+    },
+    completedCount: (state) => state.todos.filter(todo => todo.done).length,
+    pendingCount: (state) => state.todos.filter(todo => !todo.done).length,
+    completionRate: (state) => {
+      if (state.todos.length === 0) return 0;
+      return Math.round((state.todos.filter(todo => todo.done).length / state.todos.length) * 100);
+    },
+  },
+  actions: {
+    async fetchTodos() {
+      this.isLoading = true;
+      this.error = null;
+      
+      try {
+        const response = await fetch('/api/todos');
+        if (!response.ok) {
+          throw new Error('Failed to fetch todos');
+        }
+        this.todos = await response.json();
+      } catch (error) {
+        this.error = error.message;
+        console.error('Failed to fetch todos:', error);
+      } finally {
+        this.isLoading = false;
+      }
+    },
+    
+    addTodo(text) {
+      const todo = {
+        id: Date.now(),
+        text: text.trim(),
+        done: false,
+        createdAt: new Date(),
+      };
+      
+      this.todos.push(todo);
+      this.saveToLocalStorage();
+    },
+    
+    toggleTodo(id) {
+      const todo = this.todos.find(t => t.id === id);
+      if (todo) {
+        todo.done = !todo.done;
+        this.saveToLocalStorage();
+      }
+    },
+    
+    updateTodo(id, text) {
+      const todo = this.todos.find(t => t.id === id);
+      if (todo) {
+        todo.text = text.trim();
+        this.saveToLocalStorage();
+      }
+    },
+    
+    removeTodo(id) {
+      this.todos = this.todos.filter(t => t.id !== id);
+      this.saveToLocalStorage();
+    },
+    
+    setFilter(filter) {
+      this.filter = filter;
+    },
+    
+    clearCompleted() {
+      this.todos = this.todos.filter(todo => !todo.done);
+      this.saveToLocalStorage();
+    },
+    
+    saveToLocalStorage() {
+      localStorage.setItem('todos', JSON.stringify(this.todos));
+    },
+    
+    loadFromLocalStorage() {
+      const saved = localStorage.getItem('todos');
+      if (saved) {
+        try {
+          this.todos = JSON.parse(saved);
+        } catch (error) {
+          console.error('Failed to load todos from localStorage:', error);
+        }
+      }
+    },
+  },
+});
+
+// Watch for changes and sync to localStorage
+watch(() => todoStore.todos, () => {
+  todoStore.saveToLocalStorage();
+});
+
+// Watch for completion rate changes
+watch(() => todoStore.completionRate, (rate) => {
+  console.log(`Completion rate: ${rate}%`);
+});
+
+// Load todos on initialization
+todoStore.loadFromLocalStorage();
+
+// Usage examples
+todoStore.addTodo('Learn QuantaJS');
+todoStore.addTodo('Build a todo app');
+todoStore.addTodo('Write documentation');
+
+console.log(todoStore.filteredTodos); // All todos
+console.log(todoStore.completedCount); // 0
+console.log(todoStore.completionRate); // 0%
+
+todoStore.toggleTodo(todoStore.todos[0].id);
+console.log(todoStore.completedCount); // 1
+console.log(todoStore.completionRate); // 33%
+
+todoStore.setFilter('completed');
+console.log(todoStore.filteredTodos); // Only completed todos
+```
+
+### 2. User Authentication System
+
+A complete authentication system with user management, session handling, and API integration.
+
+```javascript
+import { createStore, watch } from '@quantajs/core';
+
+const authStore = createStore('auth', {
+  state: () => ({
+    user: null,
+    token: null,
+    isLoading: false,
+    error: null,
+    isAuthenticated: false,
+  }),
+  getters: {
+    userRole: (state) => state.user?.role || 'guest',
+    isAdmin: (state) => state.user?.role === 'admin',
+    displayName: (state) => state.user?.name || 'Guest',
+  },
+  actions: {
+    async login(credentials) {
+      this.isLoading = true;
+      this.error = null;
+      
+      try {
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(credentials),
+        });
+        
+        if (!response.ok) {
+          throw new Error('Invalid credentials');
+        }
+        
+        const data = await response.json();
+        this.user = data.user;
+        this.token = data.token;
+        this.isAuthenticated = true;
+        
+        // Store token in localStorage
+        localStorage.setItem('auth_token', data.token);
+        
+        // Set up API headers for future requests
+        this.setupApiHeaders();
+        
+      } catch (error) {
+        this.error = error.message;
+        throw error;
+      } finally {
+        this.isLoading = false;
+      }
+    },
+    
+    async register(userData) {
+      this.isLoading = true;
+      this.error = null;
+      
+      try {
+        const response = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(userData),
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Registration failed');
+        }
+        
+        const data = await response.json();
+        this.user = data.user;
+        this.token = data.token;
+        this.isAuthenticated = true;
+        
+        localStorage.setItem('auth_token', data.token);
+        this.setupApiHeaders();
+        
+      } catch (error) {
+        this.error = error.message;
+        throw error;
+      } finally {
+        this.isLoading = false;
+      }
+    },
+    
+    logout() {
+      this.user = null;
+      this.token = null;
+      this.isAuthenticated = false;
+      this.error = null;
+      
+      localStorage.removeItem('auth_token');
+      this.clearApiHeaders();
+    },
+    
+    async checkAuth() {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+      
+      this.isLoading = true;
+      
+      try {
+        const response = await fetch('/api/auth/me', {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        
+        if (response.ok) {
+          const user = await response.json();
+          this.user = user;
+          this.token = token;
+          this.isAuthenticated = true;
+          this.setupApiHeaders();
+        } else {
+          this.logout();
+        }
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        this.logout();
+      } finally {
+        this.isLoading = false;
+      }
+    },
+    
+    async updateProfile(updates) {
+      if (!this.isAuthenticated) return;
+      
+      this.isLoading = true;
+      
+      try {
+        const response = await fetch('/api/auth/profile', {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.token}`,
+          },
+          body: JSON.stringify(updates),
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to update profile');
+        }
+        
+        const updatedUser = await response.json();
+        this.user = { ...this.user, ...updatedUser };
+        
+      } catch (error) {
+        this.error = error.message;
+        throw error;
+      } finally {
+        this.isLoading = false;
+      }
+    },
+    
+    setupApiHeaders() {
+      // Set up global fetch interceptor or axios defaults
+      if (this.token) {
+        // Example with axios
+        // axios.defaults.headers.common['Authorization'] = `Bearer ${this.token}`;
+        
+        // Example with fetch wrapper
+        window.apiFetch = (url, options = {}) => {
+          return fetch(url, {
+            ...options,
+            headers: {
+              ...options.headers,
+              'Authorization': `Bearer ${this.token}`,
+            },
+          });
+        };
+      }
+    },
+    
+    clearApiHeaders() {
+      // Clear global API headers
+      // delete axios.defaults.headers.common['Authorization'];
+      delete window.apiFetch;
+    },
+  },
+});
+
+// Watch for authentication state changes
+watch(() => authStore.isAuthenticated, (isAuthenticated) => {
+  if (isAuthenticated) {
+    console.log('User authenticated:', authStore.user.name);
+    // Redirect to dashboard or update UI
+  } else {
+    console.log('User logged out');
+    // Redirect to login or update UI
+  }
+});
+
+// Watch for user role changes
+watch(() => authStore.userRole, (role) => {
+  console.log('User role changed to:', role);
+  // Update UI based on role
+});
+
+// Check authentication on app start
+authStore.checkAuth();
+
+// Usage examples
+try {
+  await authStore.login({ email: 'user@example.com', password: 'password' });
+  console.log('Logged in as:', authStore.displayName);
+  console.log('Is admin:', authStore.isAdmin);
+  
+  await authStore.updateProfile({ name: 'John Doe' });
+  console.log('Profile updated');
+  
+} catch (error) {
+  console.error('Login failed:', error);
+}
+```
+
+### 3. Shopping Cart System
+
+A complete e-commerce cart system with product management, pricing calculations, and persistence.
+
+```javascript
+import { createStore, watch } from '@quantajs/core';
+
+const cartStore = createStore('cart', {
+  state: () => ({
+    items: [],
+    isOpen: false,
+    isLoading: false,
+  }),
+  getters: {
+    itemCount: (state) => state.items.reduce((total, item) => total + item.quantity, 0),
+    subtotal: (state) => state.items.reduce((total, item) => total + (item.price * item.quantity), 0),
+    tax: (state) => state.items.reduce((total, item) => total + (item.price * item.quantity), 0) * 0.08,
+    total: (state) => {
+      const subtotal = state.items.reduce((total, item) => total + (item.price * item.quantity), 0);
+      return subtotal + (subtotal * 0.08);
+    },
+    isEmpty: (state) => state.items.length === 0,
+  },
+  actions: {
+    addItem(product, quantity = 1) {
+      const existingItem = this.items.find(item => item.id === product.id);
+      
+      if (existingItem) {
+        existingItem.quantity += quantity;
+      } else {
+        this.items.push({
+          id: product.id,
+          name: product.name,
+          price: product.price,
+          quantity,
+          image: product.image,
+        });
+      }
+      
+      this.saveToLocalStorage();
+    },
+    
+    removeItem(productId) {
+      this.items = this.items.filter(item => item.id !== productId);
+      this.saveToLocalStorage();
+    },
+    
+    updateQuantity(productId, quantity) {
+      const item = this.items.find(item => item.id === productId);
+      if (item) {
+        if (quantity <= 0) {
+          this.removeItem(productId);
+        } else {
+          item.quantity = quantity;
+          this.saveToLocalStorage();
+        }
+      }
+    },
+    
+    clearCart() {
+      this.items = [];
+      this.saveToLocalStorage();
+    },
+    
+    toggleCart() {
+      this.isOpen = !this.isOpen;
+    },
+    
+    async checkout() {
+      if (this.isEmpty) return;
+      
+      this.isLoading = true;
+      
+      try {
+        const response = await fetch('/api/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            items: this.items,
+            subtotal: this.subtotal,
+            tax: this.tax,
+            total: this.total,
+          }),
+        });
+        
+        if (!response.ok) {
+          throw new Error('Checkout failed');
+        }
+        
+        const order = await response.json();
+        this.clearCart();
+        this.toggleCart();
+        
+        return order;
+        
+      } catch (error) {
+        console.error('Checkout failed:', error);
+        throw error;
+      } finally {
+        this.isLoading = false;
+      }
+    },
+    
+    saveToLocalStorage() {
+      localStorage.setItem('cart', JSON.stringify(this.items));
+    },
+    
+    loadFromLocalStorage() {
+      const saved = localStorage.getItem('cart');
+      if (saved) {
+        try {
+          this.items = JSON.parse(saved);
+        } catch (error) {
+          console.error('Failed to load cart from localStorage:', error);
+        }
+      }
+    },
+  },
+});
+
+// Watch for cart changes
+watch(() => cartStore.items, (items) => {
+  console.log('Cart updated:', items.length, 'items');
+});
+
+watch(() => cartStore.total, (total) => {
+  console.log('Cart total:', `$${total.toFixed(2)}`);
+});
+
+// Load cart on initialization
+cartStore.loadFromLocalStorage();
+
+// Example products
+const products = [
+  { id: 1, name: 'Laptop', price: 999.99, image: '/laptop.jpg' },
+  { id: 2, name: 'Mouse', price: 29.99, image: '/mouse.jpg' },
+  { id: 3, name: 'Keyboard', price: 79.99, image: '/keyboard.jpg' },
+];
+
+// Usage examples
+cartStore.addItem(products[0], 1);
+cartStore.addItem(products[1], 2);
+cartStore.addItem(products[2], 1);
+
+console.log('Cart items:', cartStore.items);
+console.log('Item count:', cartStore.itemCount);
+console.log('Subtotal:', `$${cartStore.subtotal.toFixed(2)}`);
+console.log('Tax:', `$${cartStore.tax.toFixed(2)}`);
+console.log('Total:', `$${cartStore.total.toFixed(2)}`);
+
+cartStore.updateQuantity(1, 2); // Update laptop quantity
+cartStore.removeItem(2); // Remove mouse
+```
+
+## React Package Examples
+
+### 1. Complete Todo App with React
+
+A full-featured todo application using QuantaJS React integration.
+
+```jsx
+import React, { useState } from 'react';
+import { createStore, QuantaProvider, useStore, useQuantaStore } from '@quantajs/react';
+
+// Create the todo store
+const todoStore = createStore('todos', {
+  state: () => ({
+    todos: [],
+    filter: 'all',
+    isLoading: false,
+  }),
+  getters: {
+    filteredTodos: (state) => {
+      switch (state.filter) {
+        case 'active':
+          return state.todos.filter(todo => !todo.done);
+        case 'completed':
+          return state.todos.filter(todo => todo.done);
+        default:
+          return state.todos;
+      }
+    },
+    completedCount: (state) => state.todos.filter(todo => todo.done).length,
+    pendingCount: (state) => state.todos.filter(todo => !todo.done).length,
+  },
+  actions: {
+    addTodo(text) {
+      this.todos.push({
+        id: Date.now(),
+        text: text.trim(),
+        done: false,
+        createdAt: new Date(),
+      });
+    },
+    toggleTodo(id) {
+      const todo = this.todos.find(t => t.id === id);
+      if (todo) todo.done = !todo.done;
+    },
+    removeTodo(id) {
+      this.todos = this.todos.filter(t => t.id !== id);
+    },
+    setFilter(filter) {
+      this.filter = filter;
+    },
+    clearCompleted() {
+      this.todos = this.todos.filter(todo => !todo.done);
+    },
+  },
+});
+
+// Todo Item Component
+function TodoItem({ todo }) {
+  const store = useStore();
+  
+  return (
+    <li style={{ 
+      display: 'flex', 
+      alignItems: 'center', 
+      padding: '8px 0',
+      borderBottom: '1px solid #eee'
+    }}>
+      <input
+        type="checkbox"
+        checked={todo.done}
+        onChange={() => store.toggleTodo(todo.id)}
+        style={{ marginRight: '12px' }}
+      />
+      <span style={{
+        textDecoration: todo.done ? 'line-through' : 'none',
+        color: todo.done ? '#888' : '#333',
+        flex: 1,
+      }}>
+        {todo.text}
+      </span>
+      <button
+        onClick={() => store.removeTodo(todo.id)}
+        style={{
+          background: '#ff4757',
+          color: 'white',
+          border: 'none',
+          padding: '4px 8px',
+          borderRadius: '4px',
+          cursor: 'pointer',
+        }}
+      >
+        Delete
+      </button>
+    </li>
+  );
+}
+
+// Todo List Component
+function TodoList() {
+  const todos = useQuantaStore(todoStore, store => store.filteredTodos);
+  
+  if (todos.length === 0) {
+    return <p style={{ textAlign: 'center', color: '#888' }}>No todos found</p>;
+  }
+  
+  return (
+    <ul style={{ listStyle: 'none', padding: 0 }}>
+      {todos.map(todo => (
+        <TodoItem key={todo.id} todo={todo} />
+      ))}
+    </ul>
+  );
+}
+
+// Filter Component
+function TodoFilter() {
+  const filter = useQuantaStore(todoStore, store => store.filter);
+  const completedCount = useQuantaStore(todoStore, store => store.completedCount);
+  const pendingCount = useQuantaStore(todoStore, store => store.pendingCount);
+  const totalCount = useQuantaStore(todoStore, store => store.todos.length);
+  
+  const store = useStore();
+  
+  return (
+    <div style={{ 
+      display: 'flex', 
+      justifyContent: 'space-between', 
+      alignItems: 'center',
+      padding: '16px 0',
+      borderTop: '1px solid #eee'
+    }}>
+      <div>
+        <span style={{ marginRight: '8px' }}>
+          {pendingCount} pending
+        </span>
+        <span style={{ marginRight: '8px' }}>
+          {completedCount} completed
+        </span>
+        <span>
+          {totalCount} total
+        </span>
+      </div>
+      
+      <div>
+        <button
+          onClick={() => store.setFilter('all')}
+          style={{
+            fontWeight: filter === 'all' ? 'bold' : 'normal',
+            marginRight: '8px',
+            padding: '4px 8px',
+            border: '1px solid #ddd',
+            borderRadius: '4px',
+            background: filter === 'all' ? '#007bff' : 'white',
+            color: filter === 'all' ? 'white' : '#333',
+            cursor: 'pointer',
+          }}
+        >
+          All
+        </button>
+        <button
+          onClick={() => store.setFilter('active')}
+          style={{
+            fontWeight: filter === 'active' ? 'bold' : 'normal',
+            marginRight: '8px',
+            padding: '4px 8px',
+            border: '1px solid #ddd',
+            borderRadius: '4px',
+            background: filter === 'active' ? '#007bff' : 'white',
+            color: filter === 'active' ? 'white' : '#333',
+            cursor: 'pointer',
+          }}
+        >
+          Active
+        </button>
+        <button
+          onClick={() => store.setFilter('completed')}
+          style={{
+            fontWeight: filter === 'completed' ? 'bold' : 'normal',
+            marginRight: '8px',
+            padding: '4px 8px',
+            border: '1px solid #ddd',
+            borderRadius: '4px',
+            background: filter === 'completed' ? '#007bff' : 'white',
+            color: filter === 'completed' ? 'white' : '#333',
+            cursor: 'pointer',
+          }}
+        >
+          Completed
+        </button>
+        {completedCount > 0 && (
+          <button
+            onClick={() => store.clearCompleted()}
+            style={{
+              padding: '4px 8px',
+              border: '1px solid #ff4757',
+              borderRadius: '4px',
+              background: 'white',
+              color: '#ff4757',
+              cursor: 'pointer',
+            }}
+          >
+            Clear Completed
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Add Todo Component
+function AddTodo() {
+  const [text, setText] = useState('');
+  const store = useStore();
+  
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (text.trim()) {
+      store.addTodo(text);
+      setText('');
+    }
+  };
+  
+  return (
+    <form onSubmit={handleSubmit} style={{ marginBottom: '20px' }}>
+      <input
+        type="text"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="What needs to be done?"
+        style={{
+          width: '100%',
+          padding: '12px',
+          border: '1px solid #ddd',
+          borderRadius: '4px',
+          fontSize: '16px',
+        }}
+      />
+    </form>
+  );
+}
+
+// Main Todo App Component
+function TodoApp() {
+  return (
+    <div style={{ maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
+      <h1 style={{ textAlign: 'center', color: '#333' }}>Todo App</h1>
+      <AddTodo />
+      <TodoList />
+      <TodoFilter />
+    </div>
+  );
+}
+
+// App Component with Provider
+function App() {
+  return (
+    <QuantaProvider store={todoStore}>
+      <TodoApp />
+    </QuantaProvider>
+  );
+}
+
+export default App;
+```
+
+### 2. User Dashboard with Multiple Stores
+
+A comprehensive user dashboard demonstrating multiple stores and complex state management.
+
+```jsx
+import React from 'react';
+import { createStore, QuantaProvider, useStore, useQuantaStore } from '@quantajs/react';
+
+// User store
+const userStore = createStore('user', {
+  state: () => ({
+    user: null,
+    isLoading: false,
+    error: null,
+  }),
+  getters: {
+    isAuthenticated: (state) => !!state.user,
+    displayName: (state) => state.user?.name || 'Guest',
+    userRole: (state) => state.user?.role || 'guest',
+  },
+  actions: {
+    async login(credentials) {
+      this.isLoading = true;
+      this.error = null;
+      
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(credentials),
+        });
+        
+        if (!response.ok) {
+          throw new Error('Login failed');
+        }
+        
+        this.user = await response.json();
+      } catch (error) {
+        this.error = error.message;
+      } finally {
+        this.isLoading = false;
+      }
+    },
+    
+    logout() {
+      this.user = null;
+      this.error = null;
+    },
+  },
+});
+
+// Dashboard store
+const dashboardStore = createStore('dashboard', {
+  state: () => ({
+    stats: {
+      totalUsers: 0,
+      activeUsers: 0,
+      totalOrders: 0,
+      revenue: 0,
+    },
+    recentActivity: [],
+    isLoading: false,
+  }),
+  actions: {
+    async fetchStats() {
+      this.isLoading = true;
+      
+      try {
+        const response = await fetch('/api/dashboard/stats');
+        this.stats = await response.json();
+      } catch (error) {
+        console.error('Failed to fetch stats:', error);
+      } finally {
+        this.isLoading = false;
+      }
+    },
+    
+    async fetchRecentActivity() {
+      try {
+        const response = await fetch('/api/dashboard/activity');
+        this.recentActivity = await response.json();
+      } catch (error) {
+        console.error('Failed to fetch activity:', error);
+      }
+    },
+  },
+});
+
+// Login Component
+function LoginForm() {
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const store = useStore();
+  
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    store.login({ email, password });
+  };
+  
+  if (store.isLoading) {
+    return <div>Loading...</div>;
+  }
+  
+  return (
+    <div style={{ 
+      maxWidth: '400px', 
+      margin: '50px auto', 
+      padding: '20px',
+      border: '1px solid #ddd',
+      borderRadius: '8px'
+    }}>
+      <h2>Login</h2>
+      {store.error && (
+        <div style={{ color: 'red', marginBottom: '16px' }}>
+          {store.error}
+        </div>
+      )}
+      <form onSubmit={handleSubmit}>
+        <div style={{ marginBottom: '16px' }}>
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+            }}
+          />
+        </div>
+        <div style={{ marginBottom: '16px' }}>
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+            }}
+          />
+        </div>
+        <button
+          type="submit"
+          style={{
+            width: '100%',
+            padding: '10px',
+            background: '#007bff',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+          }}
+        >
+          Login
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// Stats Component
+function Stats() {
+  const stats = useQuantaStore(dashboardStore, store => store.stats);
+  const isLoading = useQuantaStore(dashboardStore, store => store.isLoading);
+  
+  if (isLoading) {
+    return <div>Loading stats...</div>;
+  }
+  
+  return (
+    <div style={{ 
+      display: 'grid', 
+      gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+      gap: '16px',
+      marginBottom: '24px'
+    }}>
+      <div style={{ 
+        padding: '16px', 
+        background: '#f8f9fa', 
+        borderRadius: '8px',
+        textAlign: 'center'
+      }}>
+        <h3>Total Users</h3>
+        <p style={{ fontSize: '24px', fontWeight: 'bold' }}>{stats.totalUsers}</p>
+      </div>
+      <div style={{ 
+        padding: '16px', 
+        background: '#f8f9fa', 
+        borderRadius: '8px',
+        textAlign: 'center'
+      }}>
+        <h3>Active Users</h3>
+        <p style={{ fontSize: '24px', fontWeight: 'bold' }}>{stats.activeUsers}</p>
+      </div>
+      <div style={{ 
+        padding: '16px', 
+        background: '#f8f9fa', 
+        borderRadius: '8px',
+        textAlign: 'center'
+      }}>
+        <h3>Total Orders</h3>
+        <p style={{ fontSize: '24px', fontWeight: 'bold' }}>{stats.totalOrders}</p>
+      </div>
+      <div style={{ 
+        padding: '16px', 
+        background: '#f8f9fa', 
+        borderRadius: '8px',
+        textAlign: 'center'
+      }}>
+        <h3>Revenue</h3>
+        <p style={{ fontSize: '24px', fontWeight: 'bold' }}>${stats.revenue.toLocaleString()}</p>
+      </div>
+    </div>
+  );
+}
+
+// Recent Activity Component
+function RecentActivity() {
+  const activity = useQuantaStore(dashboardStore, store => store.recentActivity);
+  
+  return (
+    <div style={{ 
+      background: 'white', 
+      padding: '20px', 
+      borderRadius: '8px',
+      border: '1px solid #ddd'
+    }}>
+      <h3>Recent Activity</h3>
+      {activity.length === 0 ? (
+        <p>No recent activity</p>
+      ) : (
+        <ul style={{ listStyle: 'none', padding: 0 }}>
+          {activity.map((item, index) => (
+            <li key={index} style={{ 
+              padding: '8px 0', 
+              borderBottom: '1px solid #eee',
+              display: 'flex',
+              justifyContent: 'space-between'
+            }}>
+              <span>{item.description}</span>
+              <span style={{ color: '#888' }}>{item.timestamp}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// Dashboard Component
+function Dashboard() {
+  const user = useQuantaStore(userStore, store => store.user);
+  const store = useStore();
+  
+  React.useEffect(() => {
+    if (user) {
+      dashboardStore.fetchStats();
+      dashboardStore.fetchRecentActivity();
+    }
+  }, [user]);
+  
+  return (
+    <div style={{ padding: '20px' }}>
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        marginBottom: '24px'
+      }}>
+        <h1>Welcome, {user.name}!</h1>
+        <button
+          onClick={() => store.logout()}
+          style={{
+            padding: '8px 16px',
+            background: '#dc3545',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+          }}
+        >
+          Logout
+        </button>
+      </div>
+      
+      <Stats />
+      <RecentActivity />
+    </div>
+  );
+}
+
+// Main App Component
+function App() {
+  const isAuthenticated = useQuantaStore(userStore, store => store.isAuthenticated);
+  
+  return (
+    <QuantaProvider store={userStore}>
+      <QuantaProvider store={dashboardStore}>
+        {isAuthenticated ? <Dashboard /> : <LoginForm />}
+      </QuantaProvider>
+    </QuantaProvider>
+  );
+}
+
+export default App;
+```
+
+## Learn More
+
+- [Tips and Examples](/docs/guides/tips-and-examples) - Practical tips and patterns
+- [React Integration](/docs/guides/react-integration) - React-specific features
+- [Managing Stores](/docs/guides/managing-stores) - Store management patterns
+- [API Reference](/docs/api/create-store) - Complete API documentation 

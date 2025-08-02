@@ -25,7 +25,7 @@ export default function Home() {
         and its powerful reactivity system.
       </h1>
       <p className="mb-8 sm:text-lg max-w-[800px] text-muted-foreground font-jura-light text-left sm:text-center text-qgray">
-        This lightweight, scalable state management library, built for modern JavaScript environments, offers an intuitive API and flexible reactivity, perfect for projects of any size—currently in beta and evolving fast!
+        This lightweight, scalable state management library, built for modern JavaScript environments, offers an intuitive API and flexible reactivity, perfect for projects of any size currently in beta and evolving fast!
       </p>
       <div className="sm:flex sm:flex-row grid grid-cols-2 items-center sm;gap-5 gap-3 mb-8">
         <Link
