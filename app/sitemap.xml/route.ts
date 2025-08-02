@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { SitemapStream, streamToPromise } from 'sitemap';
 import { readdirSync, statSync } from 'fs';
 import path from 'path';
 
@@ -23,9 +22,12 @@ function getDocSlugs() {
         traverseDir(fullPath, `${urlBase}/${item.name}`);
       } else if (item.isFile() && item.name.endsWith('.mdx')) {
         const stats = statSync(fullPath);
-        const slug = relativePath.replace(/index\.mdx$/, '');
+        let slug = relativePath.replace(/index\.mdx$/, '');
+        // Convert Windows backslashes to forward slashes and remove trailing slashes
+        slug = slug.replace(/\\/g, '/').replace(/\/+$/, '');
+        const url = slug ? `/docs/${slug}` : '/docs';
         slugs.push({
-          url: `/docs/${slug}`,
+          url: url,
           changefreq: 'weekly',
           priority: 0.7,
           lastmod: stats.mtime.toISOString().split('T')[0], // File last modified date
@@ -61,15 +63,25 @@ export async function GET() {
   // Combine all pages
   const allPages = [...staticPages, ...dynamicPages];
 
-  // Generate sitemap with namespaces
-  const sitemap = new SitemapStream({
-    hostname: baseUrl
+  // Generate sitemap manually to avoid trailing slashes
+  let sitemapString = '<?xml version="1.0" encoding="UTF-8"?>\n';
+  sitemapString += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
+  
+  allPages.forEach((page) => {
+    // Ensure URL uses forward slashes and remove trailing slash (except for root)
+    let url = page.url.replace(/\\/g, '/');
+    if (url.endsWith('/') && url !== '/') {
+      url = url.slice(0, -1);
+    }
+    sitemapString += `  <url>\n`;
+    sitemapString += `    <loc>${baseUrl}${url}</loc>\n`;
+    sitemapString += `    <lastmod>${page.lastmod}</lastmod>\n`;
+    sitemapString += `    <changefreq>${page.changefreq}</changefreq>\n`;
+    sitemapString += `    <priority>${page.priority}</priority>\n`;
+    sitemapString += `  </url>\n`;
   });
-
-  allPages.forEach((page) => sitemap.write(page));
-  sitemap.end();
-
-  const sitemapString = await streamToPromise(sitemap).then((data) => data.toString());
+  
+  sitemapString += '</urlset>';
 
   return new NextResponse(sitemapString, {
     headers: {
