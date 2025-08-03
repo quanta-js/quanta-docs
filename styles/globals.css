@@ -211,3 +211,113 @@ pre>code {
 td>code {
   word-break: keep-all !important;
 }
+
+/* Blog specific styles */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Blog prose styles */
+.blog-prose {
+  @apply prose prose-lg dark:prose-invert max-w-none;
+}
+
+.blog-prose h1 {
+  @apply text-4xl font-bold mb-6;
+}
+
+.blog-prose h2 {
+  @apply text-3xl font-semibold mb-4 mt-8;
+}
+
+.blog-prose h3 {
+  @apply text-2xl font-semibold mb-3 mt-6;
+}
+
+.blog-prose p {
+  @apply mb-4 leading-relaxed;
+}
+
+.blog-prose ul, .blog-prose ol {
+  @apply mb-4 pl-6;
+}
+
+.blog-prose li {
+  @apply mb-2;
+}
+
+.blog-prose code {
+  @apply bg-muted px-1 py-0.5 rounded text-sm;
+}
+
+.blog-prose pre {
+  @apply bg-muted p-4 rounded-lg overflow-x-auto mb-4;
+}
+
+.blog-prose pre code {
+  @apply bg-transparent p-0;
+}
+
+.blog-prose blockquote {
+  @apply border-l-4 border-primary pl-4 italic my-4;
+}
+
+/* Enhanced code block styles */
+.line-numbers {
+  counter-reset: line;
+}
+
+.line-numbers .code-line {
+  position: relative;
+  padding-left: 3.5rem;
+}
+
+.line-numbers .code-line::before {
+  counter-increment: line;
+  content: counter(line);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2.5rem;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  color: rgb(110, 110, 110);
+  background-color: rgba(0, 0, 0, 0.02);
+  border-right: 1px solid rgba(0, 0, 0, 0.1);
+  user-select: none;
+}
+
+.dark .line-numbers .code-line::before {
+  color: rgb(160, 160, 160);
+  background-color: rgba(255, 255, 255, 0.02);
+  border-right-color: rgba(255, 255, 255, 0.1);
+}
+
+.highlight-line {
+  background-color: rgba(59, 130, 246, 0.1);
+  border-left: 3px solid rgb(59, 130, 246);
+  margin-left: -3px;
+}
+
+.dark .highlight-line {
+  background-color: rgba(59, 130, 246, 0.2);
+  border-left-color: rgb(59, 130, 246);
+}
+
+/* Filename header styles */
+.code-filename {
+  @apply bg-muted px-4 py-2 border-b border-border rounded-t-lg font-mono text-sm;
+}

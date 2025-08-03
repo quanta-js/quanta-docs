@@ -17,18 +17,10 @@ export const NAVLINKS = [
     title: "Documentation",
     href: `/docs${page_routes[0].href}`,
   },
-  // {
-  //   title: "Blog",
-  //   href: "/blog",
-  // },
-  // {
-  //   title: "Examples",
-  //   href: "#",
-  // },
-  // {
-  //   title: "Guides",
-  //   href: "#",
-  // },
+  {
+    title: "Blog",
+    href: "/blog",
+  },
   {
     title: "Community",
     href: "https://github.com/orgs/quanta-js/discussions",

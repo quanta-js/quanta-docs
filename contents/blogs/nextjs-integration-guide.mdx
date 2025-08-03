@@ -1,0 +1,359 @@
+---
+title: "Building Scalable Next.js Apps with QuantaJS State Management"
+description: "A comprehensive guide to integrating QuantaJS with Next.js applications, covering App Router, Server Components, and best practices for optimal performance."
+date: "03-08-2025"
+authors:
+  - username: "Jeel Gajera"
+    handle: "jeelgajera"
+    handleUrl: "https://github.com/jeelgajera"
+    avatar: "https://avatars.githubusercontent.com/u/83470656?v=4"
+cover: "https://images.unsplash.com/photo-1642630676881-d80d35383b54?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+---
+
+# Building Scalable Next.js Apps with QuantaJS State Management
+
+Next.js has revolutionized React development with its powerful features like Server-Side Rendering (SSR), Static Site Generation (SSG), and the new App Router. When combined with QuantaJS state management, you get a powerful stack for building scalable, performant applications. In this guide, we'll explore how to effectively integrate QuantaJS with Next.js.
+
+## Why QuantaJS + Next.js?
+
+The combination of QuantaJS and Next.js offers several advantages:
+
+### 1. **Framework-Agnostic Core**
+QuantaJS core is completely framework-agnostic, making it perfect for Next.js applications that need to share state between server and client components.
+
+### 2. **Lightweight React Integration**
+The `@quantajs/react` package provides minimal overhead while offering powerful React hooks and context integration.
+
+### 3. **SSR/SSG Compatibility**
+QuantaJS works seamlessly with Next.js rendering strategies, allowing you to hydrate state on the client while maintaining server-side rendering benefits.
+
+### 4. **Performance Optimized**
+With built-in reactivity and efficient re-rendering, QuantaJS helps you build performant Next.js applications.
+
+## Setting Up QuantaJS with Next.js
+
+### Installation
+
+```bash
+npm install @quantajs/core @quantajs/react
+```
+
+### Basic Setup with App Router
+
+Create a store provider that works with Next.js App Router:
+
+```typescript:lib/stores/user-store.ts
+import { createStore } from '@quantajs/core';
+
+export const userStore = createStore('user', {
+  state: () => ({
+    user: null as { id: string; name: string; email: string } | null,
+    isAuthenticated: false,
+    preferences: {
+      theme: 'light' as 'light' | 'dark',
+      language: 'en'
+    }
+  }),
+  getters: {
+    displayName: (state) => state.user?.name || 'Guest',
+    isLoggedIn: (state) => state.isAuthenticated
+  },
+  actions: {
+    login(userData: { id: string; name: string; email: string }) {
+      this.user = userData;
+      this.isAuthenticated = true;
+    },
+    logout() {
+      this.user = null;
+      this.isAuthenticated = false;
+    },
+    updatePreferences(preferences: Partial<typeof this.preferences>) {
+      Object.assign(this.preferences, preferences);
+    }
+  }
+});
+```
+
+### Provider Setup
+
+```typescript:app/providers.tsx
+'use client';
+
+import { QuantaProvider } from '@quantajs/react';
+import { userStore } from '@/lib/stores/user-store';
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <QuantaProvider store={userStore}>
+      {children}
+    </QuantaProvider>
+  );
+}
+```
+
+```typescript:app/layout.tsx
+import { Providers } from './providers';
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <body>
+        <Providers>
+          {children}
+        </Providers>
+      </body>
+    </html>
+  );
+}
+```
+
+## Working with Server and Client Components
+
+### Client Components
+
+Use QuantaJS hooks in client components:
+
+```typescript:app/components/user-profile.tsx
+'use client';
+
+import { useStore } from '@quantajs/react';
+
+export function UserProfile() {
+  const store = useStore();
+  
+  if (!store.isLoggedIn) {
+    return <div>Please log in</div>;
+  }
+  
+  return (
+    <div>
+      <h2>Welcome, {store.displayName}!</h2>
+      <p>Email: {store.user?.email}</p>
+      <button onClick={() => store.logout()}>Logout</button>
+    </div>
+  );
+}
+```
+
+### Server Components
+
+Server components can't use hooks, but you can pass data down:
+
+```typescript:app/components/server-user-info.tsx
+import { userStore } from '@/lib/stores/user-store';
+
+export function ServerUserInfo() {
+  // Access store state directly (read-only)
+  const user = userStore.user;
+  const isAuthenticated = userStore.isAuthenticated;
+  
+  if (!isAuthenticated) {
+    return <div>Not authenticated</div>;
+  }
+  
+  return (
+    <div>
+      <h3>Server Rendered User Info</h3>
+      <p>Name: {user?.name}</p>
+      <p>Email: {user?.email}</p>
+    </div>
+  );
+}
+```
+
+## Advanced Patterns
+
+### Multiple Stores
+
+For larger applications, you might want multiple stores:
+
+```typescript:lib/stores/cart-store.ts
+import { createStore } from '@quantajs/core';
+
+export const cartStore = createStore('cart', {
+  state: () => ({
+    items: [] as Array<{ id: string; name: string; price: number; quantity: number }>,
+    isOpen: false
+  }),
+  getters: {
+    totalItems: (state) => state.items.reduce((sum, item) => sum + item.quantity, 0),
+    totalPrice: (state) => state.items.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+  },
+  actions: {
+    addItem(item: { id: string; name: string; price: number }) {
+      const existingItem = this.items.find(i => i.id === item.id);
+      if (existingItem) {
+        existingItem.quantity++;
+      } else {
+        this.items.push({ ...item, quantity: 1 });
+      }
+    },
+    removeItem(id: string) {
+      this.items = this.items.filter(item => item.id !== id);
+    },
+    toggleCart() {
+      this.isOpen = !this.isOpen;
+    }
+  }
+});
+```
+
+### Custom Provider with Multiple Stores
+
+```typescript:app/providers.tsx
+'use client';
+
+import { QuantaProvider } from '@quantajs/react';
+import { userStore } from '@/lib/stores/user-store';
+import { cartStore } from '@/lib/stores/cart-store';
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <QuantaProvider store={userStore}>
+      <QuantaProvider store={cartStore}>
+        {children}
+      </QuantaProvider>
+    </QuantaProvider>
+  );
+}
+```
+
+### Using Direct Store References
+
+For components that need access to multiple stores:
+
+```typescript:app/components/header.tsx
+'use client';
+
+import { useQuantaStore } from '@quantajs/react';
+import { userStore } from '@/lib/stores/user-store';
+import { cartStore } from '@/lib/stores/cart-store';
+
+export function Header() {
+  const user = useQuantaStore(userStore, store => store.user);
+  const cartItems = useQuantaStore(cartStore, store => store.totalItems);
+  const isCartOpen = useQuantaStore(cartStore, store => store.isOpen);
+  
+  return (
+    <header>
+      <div>Welcome, {user?.name || 'Guest'}</div>
+      <button onClick={() => cartStore.toggleCart()}>
+        Cart ({cartItems})
+      </button>
+    </header>
+  );
+}
+```
+
+## Performance Optimization
+
+### Selective Re-rendering
+
+Use selectors to prevent unnecessary re-renders:
+
+```typescript:app/components/cart-summary.tsx
+'use client';
+
+import { useQuantaStore } from '@quantajs/react';
+import { cartStore } from '@/lib/stores/cart-store';
+
+export function CartSummary() {
+  // Only re-render when totalPrice changes
+  const totalPrice = useQuantaStore(cartStore, store => store.totalPrice);
+  
+  return (
+    <div>
+      <h3>Cart Total: ${totalPrice.toFixed(2)}</h3>
+    </div>
+  );
+}
+```
+
+### Component-Scoped Stores
+
+For local state that doesn't need to be shared:
+
+```typescript:app/components/todo-list.tsx
+'use client';
+
+import { useCreateStore } from '@quantajs/react';
+
+export function TodoList() {
+  const todoStore = useCreateStore(
+    'todos',
+    () => ({ todos: [], filter: 'all' }),
+    {
+      filteredTodos: (state) => {
+        switch (state.filter) {
+          case 'active': return state.todos.filter(t => !t.completed);
+          case 'completed': return state.todos.filter(t => t.completed);
+          default: return state.todos;
+        }
+      }
+    },
+    {
+      addTodo(text: string) {
+        this.todos.push({ id: Date.now(), text, completed: false });
+      },
+      toggleTodo(id: number) {
+        const todo = this.todos.find(t => t.id === id);
+        if (todo) todo.completed = !todo.completed;
+      }
+    }
+  );
+  
+  return (
+    <div>
+      {/* Todo list implementation */}
+    </div>
+  );
+}
+```
+
+## Best Practices
+
+### 1. **Store Organization**
+- Keep stores focused on specific domains
+- Use descriptive names for stores and actions
+- Separate business logic from UI logic
+
+### 2. **TypeScript Integration**
+- Define proper types for your store state
+- Use TypeScript for better developer experience
+
+```typescript:types/user.ts
+interface User {
+  id: string;
+  name: string;
+  email: string;
+}
+
+interface UserState {
+  user: User | null;
+  isAuthenticated: boolean;
+  preferences: {
+    theme: 'light' | 'dark';
+    language: string;
+  };
+}
+```
+
+### 3. **Error Handling**
+- Implement proper error handling in store actions
+- Use try-catch blocks for async operations
+
+### 4. **Testing**
+- Test stores independently from React components
+- Use the core package for unit testing
+
+## Conclusion
+
+QuantaJS and Next.js make a powerful combination for building modern web applications. The framework-agnostic core of QuantaJS works seamlessly with Next.js's server and client components, while the React integration provides a familiar developer experience.
+
+By following the patterns and best practices outlined in this guide, you can build scalable, performant Next.js applications with robust state management. The modular architecture of QuantaJS allows you to start simple and scale up as your application grows.
+
+Ready to get started? Check out our [Next.js integration guide](/docs/integration/nextjs-integration) for more detailed examples and advanced patterns! 

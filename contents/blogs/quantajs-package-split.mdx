@@ -1,0 +1,165 @@
+---
+title: "QuantaJS Package Split: Introducing @quantajs/core and @quantajs/react"
+description: "Learn about the major refactoring that split QuantaJS into framework-agnostic core and React-specific packages for better modularity and performance."
+date: "01-08-2025"
+authors:
+  - username: "Jeel Gajera"
+    handle: "jeelgajera"
+    handleUrl: "https://github.com/jeelgajera"
+    avatar: "https://avatars.githubusercontent.com/u/83470656?v=4"
+cover: "https://images.pexels.com/photos/32880872/pexels-photo-32880872.png"
+---
+
+# QuantaJS Package Split: A New Era of Modularity
+
+We're excited to announce a major milestone in QuantaJS development! After months of planning and development, we've successfully split QuantaJS into two distinct packages: **@quantajs/core** and **@quantajs/react**. This refactoring brings significant improvements in modularity, performance, and developer experience.
+
+## Why We Split the Package
+
+The original QuantaJS package served us well, but as the library grew in popularity and complexity, we identified several areas for improvement:
+
+### 1. **Framework Agnostic Core**
+The core state management logic is now completely framework-agnostic. This means you can use QuantaJS with any JavaScript framework or even vanilla JavaScript applications.
+
+### 2. **Reduced Bundle Size**
+By separating React-specific code from the core, applications that don't use React can now import only the essential state management features, resulting in smaller bundle sizes.
+
+### 3. **Better Tree Shaking**
+The modular structure allows bundlers to better eliminate unused code, further reducing the final bundle size.
+
+### 4. **Clearer API Boundaries**
+The separation makes it easier to understand which features are core functionality versus framework-specific integrations.
+
+## What's in Each Package
+
+### @quantajs/core
+The framework-agnostic core package contains all the essential state management features:
+
+- **`createStore`** - Create reactive stores with state, getters, and actions
+- **`reactive`** - Make objects, arrays, Maps, and Sets reactive
+- **`computed`** - Create derived, cached reactive values
+- **`watch`** - Observe reactive state changes and run side effects
+
+```typescript:store.ts
+import { createStore, reactive, computed, watch } from '@quantajs/core';
+
+// Create a store
+const counterStore = createStore('counter', {
+  state: () => ({ count: 0 }),
+  getters: {
+    doubleCount: (state) => state.count * 2
+  },
+  actions: {
+    increment() { this.count++; }
+  }
+});
+
+// Use reactive objects
+const user = reactive({ name: 'John', age: 30 });
+
+// Create computed values
+const userInfo = computed(() => `${user.name} is ${user.age} years old`);
+
+// Watch for changes
+watch(() => user.age, (newAge) => {
+  console.log(`User age changed to ${newAge}`);
+});
+```
+
+### @quantajs/react
+The React-specific package provides seamless integration with React applications:
+
+- **`useStore`** - Hook to access store from React context
+- **`useQuantaStore`** - Hook to subscribe to a specific store
+- **`useCreateStore`** - Hook to create component-scoped stores
+- **`QuantaProvider`** - React context provider for stores
+
+```typescript:app.tsx
+import { QuantaProvider, useStore, useQuantaStore } from '@quantajs/react';
+
+function App() {
+  return (
+    <QuantaProvider store={counterStore}>
+      <Counter />
+    </QuantaProvider>
+  );
+}
+
+function Counter() {
+  const store = useStore();
+  return (
+    <div>
+      <p>Count: {store.count}</p>
+      <button onClick={() => store.increment()}>+</button>
+    </div>
+  );
+}
+```
+
+## Migration Guide
+
+If you're using the original QuantaJS package, here's how to migrate:
+
+### For React Applications
+```bash
+# Remove the old package
+npm uninstall quantajs
+
+# Install the new packages
+npm install @quantajs/core @quantajs/react
+```
+
+Update your imports:
+```typescript
+// Old
+import { createStore, useStore } from 'quantajs';
+
+// New
+import { createStore } from '@quantajs/core';
+import { useStore } from '@quantajs/react';
+```
+
+### For Non-React Applications
+```bash
+# Install only the core package
+npm install @quantajs/core
+```
+
+```typescript
+// Import from core package
+import { createStore, reactive, computed, watch } from '@quantajs/core';
+```
+
+## Performance Improvements
+
+The package split brings several performance benefits:
+
+1. **Smaller Initial Bundle**: React applications can now tree-shake unused core features
+2. **Faster Startup**: Reduced parsing time for non-React applications
+3. **Better Caching**: Separate packages can be cached independently
+4. **Optimized Imports**: Direct imports from specific packages
+
+## What's Next
+
+This package split is just the beginning. We have exciting plans for the future:
+
+- **DevTools**: Dedicated debugging tools for QuantaJS
+- **Persistence**: Automatic state persistence with multiple backends
+- **Distributed State**: Multi-window and worker state synchronization
+
+## Community Feedback
+
+We'd love to hear your thoughts on this refactoring! Join our discussions on GitHub and let us know:
+
+- How the migration process went for you
+- Any performance improvements you've noticed
+- Ideas for future framework integrations
+- Suggestions for the upcoming DevTools
+
+## Conclusion
+
+The QuantaJS package split represents our commitment to building a robust, flexible, and performant state management solution. By separating concerns and providing clear API boundaries, we're making QuantaJS more accessible to developers across different ecosystems.
+
+Whether you're building a React application, a vanilla JavaScript project, or exploring other frameworks, QuantaJS now provides the right tools for your specific needs.
+
+Happy coding with QuantaJS! 🚀 

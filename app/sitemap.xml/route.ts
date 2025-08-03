@@ -54,6 +54,13 @@ export async function GET() {
       priority: 1.0,
       lastmod: '2025-03-10',
     },
+    {
+      url: '/blog',
+      changefreq: 'weekly' as const,
+      priority: 0.7,
+      lastmod: '2025-08-03',
+    },
+
     // Add other static pages (e.g., /about) here
   ];
 
