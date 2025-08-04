@@ -3,9 +3,10 @@ import { getRawMdxForSlug } from "@/lib/markdown";
 
 export async function GET(
   req: NextRequest,
-  context: { params: { slug?: string[] } }
+  context: { params: Promise<{ slug?: string[] }> }
 ) {
-  const slug = context.params.slug?.join("/") || "";
+  const params = await context.params;
+  const slug = params.slug?.join("/") || "";
   const rawMdx = await getRawMdxForSlug(slug);
 
   if (!rawMdx) {
