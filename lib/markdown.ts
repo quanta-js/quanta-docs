@@ -433,3 +433,15 @@ function rehypeEnhancedCodeBlocks() {
         });
     };
 }
+
+export async function getRawMdxForSlug(slug: string) {
+  try {
+    const docsDir = path.join(process.cwd(), 'contents', 'docs');
+    const contentPath = slug ? path.join(docsDir, slug, 'index.mdx') : path.join(docsDir, 'index.mdx');
+    const rawMdx = await fs.readFile(contentPath, 'utf-8');
+    return rawMdx;
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}

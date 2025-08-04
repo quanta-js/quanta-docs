@@ -5,6 +5,7 @@ import { Space_Mono, Space_Grotesk } from "next/font/google";
 import { Footer } from "@/components/footer";
 import Script from "next/script";
 import "@/styles/globals.css";
+import { Toaster } from "@/components/ui/toaster";
 
 const sansFont = Space_Grotesk({
   subsets: ["latin"],
@@ -119,6 +120,7 @@ export default function RootLayout({
             {children}
           </main>
           <Footer />
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>

@@ -5,24 +5,28 @@ import { page_routes } from "@/lib/routes-config";
 import { notFound } from "next/navigation";
 import { getDocsForSlug } from "@/lib/markdown";
 import { Typography } from "@/components/typography";
+import { CopyButton } from "@/components/CopyButton";
 
 type PageProps = {
   params: Promise<{ slug: string[] }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 };
 
 export default async function DocsPage(props: PageProps) {
   const params = await props.params;
-
   const { slug = [] } = params;
+  const pathName = slug.join('/');
 
-  const pathName = slug.join("/");
   const res = await getDocsForSlug(pathName);
-
   if (!res) notFound();
+
   return (
     <div className="flex items-start gap-10">
       <div className="flex-[4.5] py-10">
-        <DocsBreadcrumb paths={slug} />
+        <div className="flex items-center justify-between mb-4">
+          <DocsBreadcrumb paths={slug} />
+          <CopyButton />
+        </div>
         <Typography>
           {/* <h1 className="sm:text-3xl text-2xl !-mt-0.5">
             {res.frontmatter.title}
