@@ -19,7 +19,7 @@ export function CopyButton() {
             const slug = pathname.replace('/docs/', '');
             const response = await fetch(`/api/docs/raw/${slug}`);
             if (!response.ok) throw new Error('Failed to fetch raw MDX');
-            const { rawMdx } = await response.json();
+            const rawMdx = await response.text() ;
             await navigator.clipboard.writeText(rawMdx);
             toast({
                 className: 'bg-black bg-opacity-50 backdrop-blur-md',
