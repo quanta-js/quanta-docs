@@ -17,6 +17,7 @@ function createStore<S, G, A>(
     state: () => S;
     getters?: { [K in keyof G]: (state: S) => G[K] };
     actions?: { [K in keyof A]: (this: StoreInstance<S, G, A>, ...args: any[]) => any };
+    persist?: PersistenceConfig<S>;
   }
 ): StoreInstance<S, G, A>;
 ```
@@ -28,6 +29,7 @@ function createStore<S, G, A>(
   - `state`: A function returning the initial state object.
   - `getters` (optional): An object of getter functions that compute derived state.
   - `actions` (optional): An object of action methods that can modify state.
+  - `persist` (optional): Persistence configuration for automatic state saving and restoration.
 
 ## Returns
 
@@ -36,7 +38,7 @@ A `StoreInstance` with flattened access to state, getters, and actions.
 ## Example
 
 ```javascript
-import { createStore } from '@quantajs/core';
+import { createStore, LocalStorageAdapter } from '@quantajs/core';
 
 const store = createStore('counter', {
   state: () => ({ count: 0 }),
@@ -46,13 +48,19 @@ const store = createStore('counter', {
   actions: { 
     increment() { this.count++; } 
   },
+  persist: {
+    adapter: new LocalStorageAdapter('counter-store'),
+    debounceMs: 500
+  }
 });
 
-console.log(store.count); // 0
-console.log(store.doubled); // 0
+console.log(store.count); // 0 (or restored value from storage)
+console.log(store.doubled); // 0 (or restored value * 2)
 store.increment();
 console.log(store.count); // 1
 console.log(store.doubled); // 2
+
+// State is automatically saved to localStorage and restored on page reload
 ```
 
 ## Store Structure
@@ -63,6 +71,8 @@ The returned store instance provides:
 - **Getters**: Computed values that automatically update when dependencies change
 - **Actions**: Methods that can modify state using `this`
 - **subscribe**: Method to subscribe to store changes
+- **$reset**: Method to reset store to initial state
+- **$persist**: Persistence manager for manual persistence control (if persistence is configured)
 
 ## TypeScript Support
 
@@ -108,3 +118,5 @@ const counterStore = createStore<CounterState, CounterGetters, CounterActions>('
 - [Reactive State](/docs/guides/reactive-state) - Understanding reactivity
 - [Computed Values](/docs/guides/computed-values) - Using getters
 - [Managing Stores](/docs/guides/managing-stores) - Store management patterns
+- [Persistence Guide](/docs/guides/persistence) - Using persistence for state saving
+- [Persistence API](/docs/api/persistence) - Complete persistence API reference

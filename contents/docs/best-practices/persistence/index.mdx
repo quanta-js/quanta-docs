@@ -1,0 +1,730 @@
+---
+title: Persistence Best Practices
+description: Best practices for using QuantaJS persistence system effectively and efficiently.
+---
+
+# Persistence Best Practices
+
+This guide covers best practices for implementing persistence in your QuantaJS applications, ensuring optimal performance, reliability, and user experience.
+
+## Storage Strategy
+
+### Choose the Right Storage Adapter
+
+Select storage adapters based on your specific use case:
+
+```javascript
+// For user preferences and settings (most common)
+const settingsStore = createStore('settings', {
+  state: () => ({ theme: 'light', language: 'en' }),
+  persist: {
+    adapter: new LocalStorageAdapter('user-settings')
+  }
+});
+
+// For temporary session data
+const sessionStore = createStore('session', {
+  state: () => ({ formData: {}, currentStep: 1 }),
+  persist: {
+    adapter: new SessionStorageAdapter('session-data')
+  }
+});
+
+// For large datasets and complex objects
+const dataStore = createStore('data', {
+  state: () => ({ documents: [], cache: new Map() }),
+  persist: {
+    adapter: new IndexedDBAdapter('app-data', 'app-db', 'stores', 1)
+  }
+});
+```
+
+### Storage Key Naming Convention
+
+Use consistent and descriptive storage keys:
+
+```javascript
+// Good: Descriptive and namespaced
+new LocalStorageAdapter('user-preferences-v2')
+new LocalStorageAdapter('shopping-cart-items')
+new LocalStorageAdapter('app-settings-theme')
+
+// Avoid: Generic or unclear names
+new LocalStorageAdapter('store')
+new LocalStorageAdapter('data')
+new LocalStorageAdapter('app')
+```
+
+## Performance Optimization
+
+### Debounce Save Operations
+
+Use appropriate debounce delays to balance responsiveness and performance:
+
+```javascript
+// For frequently changing data (e.g., form inputs)
+const formStore = createStore('form', {
+  state: () => ({ input: '' }),
+  persist: {
+    adapter: new LocalStorageAdapter('form-data'),
+    debounceMs: 1000 // Save after 1 second of inactivity
+  }
+});
+
+// For stable data (e.g., user settings)
+const settingsStore = createStore('settings', {
+  state: () => ({ theme: 'light' }),
+  persist: {
+    adapter: new LocalStorageAdapter('settings'),
+    debounceMs: 300 // Save after 300ms
+  }
+});
+
+// For critical data that needs immediate persistence
+const criticalStore = createStore('critical', {
+  state: () => ({ user: null }),
+  persist: {
+    adapter: new LocalStorageAdapter('critical-data'),
+    debounceMs: 0 // Save immediately
+  }
+});
+```
+
+### Selective Persistence
+
+Only persist essential data to improve performance:
+
+```javascript
+const store = createStore('efficient', {
+  state: () => ({
+    // Essential data to persist
+    user: null,
+    settings: { theme: 'light' },
+    preferences: { language: 'en' },
+    
+    // Temporary data - don't persist
+    temporaryData: [],
+    formDrafts: {},
+    analytics: [],
+    
+    // Large objects - don't persist
+    cache: new Map(),
+    documents: []
+  }),
+  persist: {
+    adapter: new LocalStorageAdapter('efficient-store'),
+    include: ['user', 'settings', 'preferences'], // Only persist essential data
+    exclude: ['temporaryData', 'formDrafts', 'analytics', 'cache', 'documents']
+  }
+});
+```
+
+### Lazy Loading
+
+Load persisted data only when needed:
+
+```javascript
+const store = createStore('lazy', {
+  state: () => ({
+    user: null,
+    isHydrated: false,
+    isLoading: false
+  }),
+  persist: {
+    adapter: new LocalStorageAdapter('lazy-store'),
+    onError: (error, operation) => {
+      if (operation === 'read') {
+        store.isHydrated = true; // Mark as hydrated even on error
+      }
+    }
+  }
+});
+
+// Check hydration status before using persisted data
+function useUserData() {
+  if (!store.$persist?.isRehydrated()) {
+    return { user: null, isLoading: true };
+  }
+  
+  return { user: store.user, isLoading: false };
+}
+```
+
+## Data Integrity
+
+### Implement Data Validation
+
+Always validate data before saving and after loading:
+
+```javascript
+const store = createStore('validated', {
+  state: () => ({
+    user: null,
+    settings: { theme: 'light', language: 'en' }
+  }),
+  persist: {
+    adapter: new LocalStorageAdapter('validated-store'),
+    validator: (data) => {
+      // Validate user data structure
+      if (data.user && typeof data.user.id !== 'string') {
+        return false;
+      }
+      
+      // Validate settings
+      if (data.settings) {
+        const validThemes = ['light', 'dark', 'auto'];
+        const validLanguages = ['en', 'es', 'fr'];
+        
+        if (!validThemes.includes(data.settings.theme)) {
+          return false;
+        }
+        
+        if (!validLanguages.includes(data.settings.language)) {
+          return false;
+        }
+      }
+      
+      return true;
+    },
+    onError: (error, operation) => {
+      if (operation === 'read' && !store.validator(data)) {
+        // Reset to defaults if validation fails
+        store.$reset();
+      }
+    }
+  }
+});
+```
+
+### Handle Schema Evolution
+
+Use migrations to handle data structure changes:
+
+```javascript
+const store = createStore('evolving', {
+  state: () => ({
+    user: null,
+    settings: { 
+      theme: 'light', 
+      language: 'en', 
+      notifications: { email: true, push: false }
+    }
+  }),
+  persist: {
+    adapter: new LocalStorageAdapter('evolving-store'),
+    version: 3,
+    migrations: {
+      2: (data) => {
+        // Add language setting
+        return {
+          ...data,
+          settings: {
+            ...data.settings,
+            language: 'en'
+          }
+        };
+      },
+      3: (data) => {
+        // Restructure notifications
+        return {
+          ...data,
+          settings: {
+            ...data.settings,
+            notifications: {
+              email: data.settings.notifications?.email ?? true,
+              push: data.settings.notifications?.push ?? false
+            }
+          }
+        };
+      }
+    }
+  }
+});
+```
+
+### Use Common Migration Patterns
+
+Leverage built-in migration helpers for common operations:
+
+```javascript
+import { CommonMigrations } from '@quantajs/core';
+
+const store = createStore('patterns', {
+  state: () => ({
+    user: null,
+    settings: { theme: 'light' }
+  }),
+  persist: {
+    adapter: new LocalStorageAdapter('patterns-store'),
+    version: 4,
+    migrations: {
+      2: CommonMigrations.addProperty('settings', { language: 'en' }),
+      3: CommonMigrations.renameProperty('user', 'currentUser'),
+      4: CommonMigrations.transformProperty('settings', (settings) => ({
+        ...settings,
+        theme: settings.theme === 'auto' ? 'light' : settings.theme
+      }))
+    }
+  }
+});
+```
+
+## Error Handling
+
+### Comprehensive Error Handling
+
+Implement robust error handling for all persistence operations:
+
+```javascript
+const store = createStore('robust', {
+  state: () => ({ data: [] }),
+  persist: {
+    adapter: new LocalStorageAdapter('robust-store'),
+    onError: (error, operation) => {
+      // Log errors for debugging
+      console.error(`Persistence ${operation} failed:`, error);
+      
+      // Handle specific error types
+      switch (operation) {
+        case 'read':
+          console.warn('Failed to load persisted state, using defaults');
+          // Optionally show user notification
+          showNotification('Failed to restore previous settings', 'warning');
+          break;
+          
+        case 'write':
+          if (error.name === 'QuotaExceededError') {
+            // Handle storage quota exceeded
+            showNotification('Storage space exceeded. Some data may not be saved.', 'error');
+            
+            // Try to clear old data
+            store.$persist?.clear().catch(clearError => {
+              console.error('Failed to clear old data:', clearError);
+            });
+          } else {
+            showNotification('Failed to save data', 'error');
+          }
+          break;
+          
+        case 'remove':
+          console.error('Failed to clear persisted data:', error);
+          break;
+      }
+      
+      // Report to analytics/monitoring service
+      reportError('persistence_error', { operation, error: error.message });
+    }
+  }
+});
+```
+
+### Fallback Strategies
+
+Implement fallback mechanisms when primary persistence fails:
+
+```javascript
+const store = createStore('fallback', {
+  state: () => ({ settings: { theme: 'light' } }),
+  persist: {
+    adapter: new LocalStorageAdapter('fallback-store'),
+    onError: async (error, operation) => {
+      if (operation === 'read') {
+        // Try fallback storage methods
+        try {
+          // Try sessionStorage as fallback
+          const fallbackData = sessionStorage.getItem('fallback-settings');
+          if (fallbackData) {
+            const parsed = JSON.parse(fallbackData);
+            Object.assign(store.settings, parsed);
+            console.log('Loaded from fallback storage');
+            return;
+          }
+        } catch (fallbackError) {
+          console.warn('Fallback loading failed:', fallbackError);
+        }
+        
+        // Try cookies as last resort
+        try {
+          const cookieData = getCookie('app-settings');
+          if (cookieData) {
+            const parsed = JSON.parse(decodeURIComponent(cookieData));
+            Object.assign(store.settings, parsed);
+            console.log('Loaded from cookie fallback');
+            return;
+          }
+        } catch (cookieError) {
+          console.warn('Cookie fallback failed:', cookieError);
+        }
+        
+        // Use default values if all fallbacks fail
+        console.log('Using default values');
+      }
+    }
+  }
+});
+```
+
+## Security Considerations
+
+### Sensitive Data Handling
+
+Never persist sensitive information without proper encryption:
+
+```javascript
+// ❌ Don't persist sensitive data
+const badStore = createStore('bad', {
+  state: () => ({
+    user: null,
+    password: '', // Never persist passwords
+    apiKey: '', // Never persist API keys
+    creditCard: {} // Never persist financial data
+  }),
+  persist: {
+    adapter: new LocalStorageAdapter('bad-store')
+  }
+});
+
+// ✅ Only persist non-sensitive data
+const goodStore = createStore('good', {
+  state: () => ({
+    user: null,
+    preferences: { theme: 'light' },
+    settings: { language: 'en' }
+  }),
+  persist: {
+    adapter: new LocalStorageAdapter('good-store'),
+    include: ['preferences', 'settings'] // Only persist safe data
+  }
+});
+```
+
+### Data Sanitization
+
+Sanitize data before persistence to prevent XSS and injection attacks:
+
+```javascript
+const store = createStore('sanitized', {
+  state: () => ({
+    user: null,
+    notes: '',
+    settings: { theme: 'light' }
+  }),
+  persist: {
+    adapter: new LocalStorageAdapter('sanitized-store'),
+    transform: {
+      out: (data) => {
+        // Sanitize data before saving
+        return {
+          ...data,
+          notes: data.notes ? sanitizeHtml(data.notes) : '',
+          user: data.user ? {
+            id: data.user.id,
+            name: data.user.name ? sanitizeString(data.user.name) : '',
+            email: data.user.email ? sanitizeEmail(data.user.email) : ''
+          } : null
+        };
+      },
+      in: (data) => {
+        // Validate data after loading
+        return {
+          ...data,
+          notes: data.notes ? validateString(data.notes) : '',
+          user: data.user ? validateUser(data.user) : null
+        };
+      }
+    }
+  }
+});
+
+function sanitizeHtml(html) {
+  // Implement HTML sanitization
+  return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+}
+
+function sanitizeString(str) {
+  // Implement string sanitization
+  return str.replace(/[<>]/g, '');
+}
+
+function sanitizeEmail(email) {
+  // Implement email validation
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email) ? email : '';
+}
+```
+
+## Testing Strategies
+
+### Unit Testing Persistence
+
+Test persistence functionality in isolation:
+
+```javascript
+import { createStore, LocalStorageAdapter } from '@quantajs/core';
+
+describe('Persistence', () => {
+  let store;
+  
+  beforeEach(() => {
+    // Clear storage before each test
+    localStorage.clear();
+    
+    store = createStore('test', {
+      state: () => ({ count: 0 }),
+      persist: {
+        adapter: new LocalStorageAdapter('test-store')
+      }
+    });
+  });
+  
+  afterEach(() => {
+    // Clean up after each test
+    localStorage.clear();
+  });
+  
+  test('should persist state changes', async () => {
+    store.count = 42;
+    
+    // Wait for debounced save
+    await new Promise(resolve => setTimeout(resolve, 400));
+    
+    // Verify data was saved
+    const savedData = localStorage.getItem('test-store');
+    expect(savedData).toBeTruthy();
+    
+    const parsed = JSON.parse(savedData);
+    expect(parsed.data.count).toBe(42);
+  });
+  
+  test('should restore state on creation', async () => {
+    // Pre-populate storage
+    localStorage.setItem('test-store', JSON.stringify({
+      data: { count: 100 },
+      version: 1,
+      timestamp: Date.now()
+    }));
+    
+    // Create new store instance
+    const newStore = createStore('test2', {
+      state: () => ({ count: 0 }),
+      persist: {
+        adapter: new LocalStorageAdapter('test-store')
+      }
+    });
+    
+    // Wait for hydration
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    expect(newStore.count).toBe(100);
+  });
+  
+  test('should handle storage errors gracefully', () => {
+    // Mock localStorage to throw error
+    const originalSetItem = localStorage.setItem;
+    localStorage.setItem = () => { throw new Error('Storage error'); };
+    
+    expect(() => {
+      store.count = 100;
+    }).not.toThrow();
+    
+    // Restore original method
+    localStorage.setItem = originalSetItem;
+  });
+});
+```
+
+### Integration Testing
+
+Test persistence with real storage and multiple store instances:
+
+```javascript
+describe('Persistence Integration', () => {
+  test('should sync across multiple store instances', async () => {
+    const store1 = createStore('sync-test', {
+      state: () => ({ data: 'initial' }),
+      persist: {
+        adapter: new LocalStorageAdapter('sync-test-store')
+      }
+    });
+    
+    const store2 = createStore('sync-test2', {
+      state: () => ({ data: 'initial' }),
+      persist: {
+        adapter: new LocalStorageAdapter('sync-test-store')
+      }
+    });
+    
+    // Update first store
+    store1.data = 'updated';
+    
+    // Wait for persistence and cross-tab sync
+    await new Promise(resolve => setTimeout(resolve, 400));
+    
+    // Second store should have updated data
+    expect(store2.data).toBe('updated');
+  });
+  
+  test('should handle concurrent modifications', async () => {
+    const stores = [];
+    
+    // Create multiple store instances
+    for (let i = 0; i < 3; i++) {
+      stores.push(createStore(`concurrent-${i}`, {
+        state: () => ({ counter: 0 }),
+        persist: {
+          adapter: new LocalStorageAdapter('concurrent-store')
+        }
+      }));
+    }
+    
+    // Modify all stores concurrently
+    stores.forEach((store, index) => {
+      store.counter = index + 1;
+    });
+    
+    // Wait for all saves to complete
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // All stores should have the last value
+    const lastValue = stores[stores.length - 1].counter;
+    stores.forEach(store => {
+      expect(store.counter).toBe(lastValue);
+    });
+  });
+});
+```
+
+## Performance Monitoring
+
+### Track Persistence Performance
+
+Monitor persistence operations for performance issues:
+
+```javascript
+const store = createStore('monitored', {
+  state: () => ({ data: [] }),
+  persist: {
+    adapter: new LocalStorageAdapter('monitored-store'),
+    onError: (error, operation) => {
+      // Track performance metrics
+      const metrics = {
+        operation,
+        error: error.message,
+        timestamp: Date.now(),
+        dataSize: JSON.stringify(store.state).length
+      };
+      
+      // Send to analytics/monitoring service
+      analytics.track('persistence_error', metrics);
+      
+      // Log for debugging
+      console.error('Persistence error:', metrics);
+    }
+  }
+});
+
+// Wrap persistence operations for timing
+const originalSave = store.$persist.save;
+store.$persist.save = async function() {
+  const startTime = performance.now();
+  
+  try {
+    await originalSave.call(this);
+    
+    // Track successful save performance
+    const duration = performance.now() - startTime;
+    analytics.track('persistence_success', {
+      operation: 'save',
+      duration,
+      dataSize: JSON.stringify(store.state).length
+    });
+  } catch (error) {
+    // Track failed save performance
+    const duration = performance.now() - startTime;
+    analytics.track('persistence_failure', {
+      operation: 'save',
+      duration,
+      error: error.message
+    });
+    throw error;
+  }
+};
+```
+
+### Storage Quota Management
+
+Monitor and manage storage usage:
+
+```javascript
+function checkStorageQuota() {
+  try {
+    const testKey = 'quota-test';
+    const testData = 'x'.repeat(1024 * 1024); // 1MB test data
+    
+    localStorage.setItem(testKey, testData);
+    localStorage.removeItem(testKey);
+    
+    return true; // Storage available
+  } catch (error) {
+    if (error.name === 'QuotaExceededError') {
+      // Storage quota exceeded
+      console.warn('Storage quota exceeded');
+      
+      // Try to free up space
+      clearOldData();
+      
+      return false;
+    }
+    return true;
+  }
+}
+
+function clearOldData() {
+  const keys = Object.keys(localStorage);
+  const appKeys = keys.filter(key => key.startsWith('app-'));
+  
+  // Sort by timestamp (oldest first)
+  const sortedKeys = appKeys.sort((a, b) => {
+    try {
+      const dataA = JSON.parse(localStorage.getItem(a));
+      const dataB = JSON.parse(localStorage.getItem(b));
+      return (dataA.timestamp || 0) - (dataB.timestamp || 0);
+    } catch {
+      return 0;
+    }
+  });
+  
+  // Remove oldest 20% of data
+  const keysToRemove = sortedKeys.slice(0, Math.ceil(sortedKeys.length * 0.2));
+  keysToRemove.forEach(key => localStorage.removeItem(key));
+  
+  console.log(`Cleared ${keysToRemove.length} old storage keys`);
+}
+
+// Check quota before large operations
+const store = createStore('quota-aware', {
+  state: () => ({ largeData: [] }),
+  persist: {
+    adapter: new LocalStorageAdapter('quota-aware-store'),
+    onError: (error, operation) => {
+      if (error.name === 'QuotaExceededError') {
+        checkStorageQuota();
+        
+        // Retry the operation
+        setTimeout(() => {
+          store.$persist?.save().catch(retryError => {
+            console.error('Retry failed:', retryError);
+          });
+        }, 100);
+      }
+    }
+  }
+});
+```
+
+## Learn More
+
+- [Persistence Guide](/docs/guides/persistence) - Comprehensive guide to using persistence
+- [Persistence API](/docs/api/persistence) - Complete API reference
+- [Managing Stores](/docs/guides/managing-stores) - Store management patterns
+- [Storage Adapters](/docs/api/persistence/adapters) - Storage adapter documentation

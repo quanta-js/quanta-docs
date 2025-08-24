@@ -31,6 +31,7 @@ export const ROUTES: EachRoute[] = [
             { title: "Computed Values", href: "/computed-values" },
             { title: "Watching State", href: "/watching-state" },
             { title: "Managing Stores", href: "/managing-stores" },
+            { title: "Persistence", href: "/persistence", tag: "New!" },
             {
                 title: "Handling Side Effects",
                 href: "/handling-side-effects",
@@ -43,8 +44,8 @@ export const ROUTES: EachRoute[] = [
         href: "/integration",
         noLink: true,
         items: [
-            { title: "React Integration", href: "/react-integration", tag: "New!" },
-            { title: "Next.js Integration", href: "/nextjs-integration", tag: "New!" },
+            { title: "React Integration", href: "/react-integration" },
+            { title: "Next.js Integration", href: "/nextjs-integration" },
         ],
     },
     {
@@ -52,8 +53,9 @@ export const ROUTES: EachRoute[] = [
         href: "/best-practices",
         noLink: true,
         items: [
-            { title: "Tips and Examples", href: "/tips-and-examples", tag: "New!" },
-            { title: "Examples", href: "/examples", tag: "New!" },
+            { title: "Tips and Examples", href: "/tips-and-examples" },
+            { title: "Examples", href: "/examples" },
+            { title: "Persistence Examples", href: "/examples/persistence", tag: "New!" },
         ],
     },
     {
@@ -65,6 +67,7 @@ export const ROUTES: EachRoute[] = [
             { title: "reactive", href: "/reactive" },
             { title: "computed", href: "/computed" },
             { title: "watch", href: "/watch" },
+            { title: "Persistence", href: "/persistence", tag: "New!" },
         ],
     },
     {
