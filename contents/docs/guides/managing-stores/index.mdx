@@ -577,9 +577,58 @@ describe('Todo Store', () => {
 });
 ```
 
+## Persistence Integration
+
+QuantaJS provides built-in persistence capabilities that automatically save and restore store state:
+
+### Basic Persistence Setup
+
+```javascript
+import { createStore, LocalStorageAdapter } from '@quantajs/core';
+
+const userStore = createStore('user', {
+  state: () => ({
+    user: null,
+    preferences: { theme: 'light' }
+  }),
+  persist: {
+    adapter: new LocalStorageAdapter('user-store'),
+    debounceMs: 500
+  }
+});
+
+// State is automatically saved and restored
+// No manual persistence code needed!
+```
+
+### Advanced Persistence with Migrations
+
+```javascript
+const settingsStore = createStore('settings', {
+  state: () => ({
+    theme: 'light',
+    language: 'en',
+    notifications: { email: true, push: false }
+  }),
+  persist: {
+    adapter: new LocalStorageAdapter('settings-store'),
+    version: 2,
+    migrations: {
+      2: (data) => ({
+        ...data,
+        notifications: { email: true, push: false }
+      })
+    }
+  }
+});
+```
+
+For more details on persistence, see the [Persistence Guide](/docs/guides/persistence).
+
 ## Learn More
 
 - [Reactive State](/docs/guides/reactive-state) - Understanding reactivity
 - [Computed Values](/docs/guides/computed-values) - Derived state
+- [Persistence Guide](/docs/guides/persistence) - Using persistence for state saving
 - [React Integration](/docs/integration/react-integration) - React applications
 - [API Reference](/docs/api/create-store) - Complete API documentation

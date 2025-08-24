@@ -47,7 +47,7 @@ export default function TocObserver({ data }: Props) {
   }, [data]);
 
   return (
-    <div className="flex flex-col gap-2.5 text-sm dark:text-stone-300/85 text-stone-800 ml-0.5">
+    <div className="flex flex-col min-w-fit gap-2.5 text-sm dark:text-stone-300/85 text-stone-800 ml-0.5">
       {data.map(({ href, level, text }, index) => {
         return (
           <Link
@@ -60,6 +60,7 @@ export default function TocObserver({ data }: Props) {
               "dark:font-medium font-semibold text-primary":
                 activeId == href.slice(1),
             })}
+            title={text}
           >
             {text}
           </Link>
