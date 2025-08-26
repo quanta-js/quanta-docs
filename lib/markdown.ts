@@ -30,6 +30,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import Callout from "@/components/ui/Callout";
+import { PersistenceDemosWrapper } from "@/components/persistence-demos/persistence-demos";
 
 // add custom components
 const components = {
@@ -52,6 +53,7 @@ const components = {
     tbody: TableBody,
     t: TableCell,
     Callout: Callout,
+    PersistenceDemosWrapper,
 };
 
 // can be used for other pages like blogs, Guides etc
@@ -69,8 +71,7 @@ async function parseMdx<Frontmatter>(rawMdx: string) {
                     rehypePrism,
                     rehypeSlug,
                     rehypeAutolinkHeadings,
-                postProcess,
-                    
+                    postProcess,
                 ],
                 remarkPlugins: [remarkGfm],
             },
@@ -286,23 +287,27 @@ export async function getCompiledBlogForSlug(slug: string) {
 }
 
 export async function getBlogFrontmatter(slug: string) {
-  const blogFile = path.join(process.cwd(), "/contents/blogs/", `${slug}.mdx`);
-  try {
-    const rawMdx = await fs.readFile(blogFile, "utf-8");
-    return justGetFrontmatterFromMD<BlogMdxFrontmatter>(rawMdx);
-  } catch {
-    return undefined;
-  }
+    const blogFile = path.join(
+        process.cwd(),
+        "/contents/blogs/",
+        `${slug}.mdx`
+    );
+    try {
+        const rawMdx = await fs.readFile(blogFile, "utf-8");
+        return justGetFrontmatterFromMD<BlogMdxFrontmatter>(rawMdx);
+    } catch {
+        return undefined;
+    }
 }
 
 export async function getDocFrontmatter(path: string) {
-  try {
-    const contentPath = getDocsContentPath(path);
-    const rawMdx = await fs.readFile(contentPath, "utf-8");
-    return justGetFrontmatterFromMD<BlogMdxFrontmatter>(rawMdx);
-  } catch {
-    return undefined;
-  }
+    try {
+        const contentPath = getDocsContentPath(path);
+        const rawMdx = await fs.readFile(contentPath, "utf-8");
+        return justGetFrontmatterFromMD<BlogMdxFrontmatter>(rawMdx);
+    } catch {
+        return undefined;
+    }
 }
 
 function rehypeCodeTitlesWithLogo() {
@@ -435,13 +440,15 @@ function rehypeEnhancedCodeBlocks() {
 }
 
 export async function getRawMdxForSlug(slug: string) {
-  try {
-    const docsDir = path.join(process.cwd(), 'contents', 'docs');
-    const contentPath = slug ? path.join(docsDir, slug, 'index.mdx') : path.join(docsDir, 'index.mdx');
-    const rawMdx = await fs.readFile(contentPath, 'utf-8');
-    return rawMdx;
-  } catch (err) {
-    console.error(err);
-    return null;
-  }
+    try {
+        const docsDir = path.join(process.cwd(), "contents", "docs");
+        const contentPath = slug
+            ? path.join(docsDir, slug, "index.mdx")
+            : path.join(docsDir, "index.mdx");
+        const rawMdx = await fs.readFile(contentPath, "utf-8");
+        return rawMdx;
+    } catch (err) {
+        console.error(err);
+        return null;
+    }
 }

@@ -55,7 +55,7 @@ export async function GET() {
       lastmod: '2025-03-10',
     },
     {
-      url: '/blog',
+      url: '/blogs',
       changefreq: 'weekly' as const,
       priority: 0.7,
       lastmod: '2025-08-03',
