@@ -11,7 +11,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "QuantaJS Blog - Latest Updates and Insights",
+  title: "QuantaJS Blogs - Latest Updates and Insights",
   description: "Stay up to date with the latest QuantaJS developments, tutorials, and insights from the team. Learn about state management, React integration, and best practices.",
 };
 
@@ -23,7 +23,7 @@ export default async function BlogIndexPage() {
     <div className="flex flex-col gap-1 sm:min-h-[91vh] min-h-[88vh] pt-2">
       <div className="mb-7 flex flex-col gap-2">
         <h1 className="sm:text-3xl text-2xl font-extrabold">
-          QuantaJS Blog
+          QuantaJS Blogs
         </h1>
         <p className="text-muted-foreground sm:text-[16.5px] text-[14.5px]">
           Latest updates, tutorials, and insights about QuantaJS state management. From package updates to integration guides and best practices.
@@ -74,11 +74,11 @@ function ThreeDBlogCard({
   authors,
 }: BlogMdxFrontmatter & { slug: string }) {
   return (
-    <Link href={`/blog/${slug}`} className="group">
+    <Link href={`/blogs/${slug}`} className="group">
       <CardContainer className="inter-var transform hover:-translate-y-1 hover:shadow-xl transition-all w-96 h-auto rounded-xl">
         <CardBody className="bg-gray-50 relative dark:bg-black dark:border-white/[0.2] border-black/[0.1] rounded-xl p-6 border w-96 h-auto">
           {/* Title */}
-          <CardItem translateZ="50" className="text-xl font-bold text-neutral-600 dark:text-white">
+          <CardItem translateZ="50" className="text-xl font-bold text-neutral-600 dark:text-white sm:min-h-24">
             {title}
           </CardItem>
           {/* Cover Image */}
