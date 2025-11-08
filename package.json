@@ -7,13 +7,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "lint:fix": "next lint --fix"
+    "lint:fix": "next lint --fix",
+    "preview": "next build && next export && npx serve out"
   },
   "dependencies": {
     "@docsearch/css": "^3.9.0",
     "@docsearch/react": "^3.9.0",
-    "@quantajs/core": "^2.0.0-beta.3",
-    "@quantajs/react": "^2.0.0-beta.3",
+    "@quantajs/core": "^2.0.0-beta.4",
+    "@quantajs/react": "^2.0.0-beta.4",
     "@radix-ui/react-accordion": "^1.2.0",
     "@radix-ui/react-avatar": "^1.1.0",
     "@radix-ui/react-collapsible": "^1.1.0",
