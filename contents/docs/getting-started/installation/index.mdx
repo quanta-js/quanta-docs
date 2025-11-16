@@ -65,12 +65,21 @@ const counterStore = createStore('counter', {
 
 // Use in React components
 function Counter() {
-  const store = useStore();
+  const store = useStore('counter');
   return (
     <div>
       <p>Count: {store.count}</p>
       <button onClick={() => store.increment()}>Increment</button>
     </div>
+  );
+}
+
+// Wrap your app with QuantaProvider
+function App() {
+  return (
+    <QuantaProvider stores={{ counter: counterStore }}>
+      <Counter />
+    </QuantaProvider>
   );
 }
 ```

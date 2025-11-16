@@ -4,6 +4,48 @@ import { Cover } from "@/components/ui/cover";
 import { page_routes } from "@/lib/routes-config";
 import { MoveUpRightIcon } from "lucide-react";
 import Link from "next/link";
+import { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "QuantaJS - Modern State Management for JavaScript",
+  description: "QuantaJS is a compact, scalable, and developer-friendly state management library for JavaScript and TypeScript. Features reactive state, computed values, persistence, and seamless React integration. Perfect for modern web applications.",
+  keywords: [
+    "QuantaJS",
+    "state management",
+    "javascript state management",
+    "typescript state management",
+    "react state management",
+    "reactive programming",
+    "computed values",
+    "state persistence",
+    "lightweight state management",
+    "framework agnostic",
+  ],
+  alternates: {
+    canonical: "https://quantajs.com/",
+  },
+  openGraph: {
+    title: "QuantaJS - Modern State Management for JavaScript",
+    description: "A compact, scalable, and developer-friendly state management library for JavaScript and TypeScript with reactive state and seamless React integration.",
+    url: "https://quantajs.com/",
+    type: "website",
+    siteName: "QuantaJS",
+    images: [
+      {
+        url: "https://quantajs.com/img/quantajs_banner.png",
+        width: 1200,
+        height: 630,
+        alt: "QuantaJS - Modern State Management Library for JavaScript",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "QuantaJS - Modern State Management for JavaScript",
+    description: "A compact, scalable, and developer-friendly state management library for JavaScript and TypeScript.",
+    images: ["https://quantajs.com/img/quantajs_banner.png"],
+  },
+};
 
 export default function Home() {
 

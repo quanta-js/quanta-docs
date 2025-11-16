@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { getDocsForSlug } from "@/lib/markdown";
 import { Typography } from "@/components/typography";
 import { CopyButton } from "@/components/CopyButton";
+import { StructuredData, generateArticleStructuredData } from "@/components/structured-data";
 
 type PageProps = {
   params: Promise<{ slug: string[] }>;
@@ -20,26 +21,36 @@ export default async function DocsPage(props: PageProps) {
   const res = await getDocsForSlug(pathName);
   if (!res) notFound();
 
+  const url = `https://quantajs.com/docs/${pathName}`;
+  const structuredData = generateArticleStructuredData(
+    res.frontmatter.title,
+    res.frontmatter.description || `Learn about ${res.frontmatter.title} in QuantaJS`,
+    url
+  );
+
   return (
-    <div className="flex items-start gap-10">
-      <div className="flex-[4.5] py-10">
-        <div className="flex items-center justify-between mb-4">
-          <DocsBreadcrumb paths={slug} />
-          <CopyButton />
+    <>
+      <StructuredData type="TechArticle" data={structuredData} />
+      <div className="flex items-start gap-10">
+        <div className="flex-[4.5] py-10">
+          <div className="flex items-center justify-between mb-4">
+            <DocsBreadcrumb paths={slug} />
+            <CopyButton />
+          </div>
+          <Typography>
+            {/* <h1 className="sm:text-3xl text-2xl !-mt-0.5">
+              {res.frontmatter.title}
+            </h1>
+            <p className="-mt-4 text-muted-foreground sm:text-[16.5px] text-[14.5px]">
+              {res.frontmatter.description}
+            </p> */}
+            <div>{res.content}</div>
+            <Pagination pathname={pathName} />
+          </Typography>
         </div>
-        <Typography>
-          {/* <h1 className="sm:text-3xl text-2xl !-mt-0.5">
-            {res.frontmatter.title}
-          </h1>
-          <p className="-mt-4 text-muted-foreground sm:text-[16.5px] text-[14.5px]">
-            {res.frontmatter.description}
-          </p> */}
-          <div>{res.content}</div>
-          <Pagination pathname={pathName} />
-        </Typography>
+        <Toc path={pathName} />
       </div>
-      <Toc path={pathName} />
-    </div>
+    </>
   );
 }
 
@@ -52,9 +63,52 @@ export async function generateMetadata(props: PageProps) {
   const res = await getDocsForSlug(pathName);
   if (!res) return {};
   const { frontmatter } = res;
+  
+  const title = `${frontmatter.title} | QuantaJS Documentation`;
+  const description = frontmatter.description || `Learn about ${frontmatter.title} in QuantaJS - a modern state management library for JavaScript and TypeScript.`;
+  const url = `https://quantajs.com/docs/${pathName}`;
+  
+  // Generate keywords based on title and path
+  const keywords = [
+    "QuantaJS",
+    frontmatter.title,
+    "state management",
+    "javascript",
+    "typescript",
+    "documentation",
+    "tutorial",
+    "guide",
+    ...pathName.split("/").filter(Boolean),
+  ];
+
   return {
-    title: frontmatter.title + " | QuantaJS",
-    description: frontmatter.description,
+    title,
+    description,
+    keywords,
+    alternates: {
+      canonical: url,
+    },
+    openGraph: {
+      title,
+      description,
+      url,
+      type: "article",
+      siteName: "QuantaJS Documentation",
+      images: [
+        {
+          url: "https://quantajs.com/img/quantajs_banner.png",
+          width: 1200,
+          height: 630,
+          alt: `${frontmatter.title} - QuantaJS Documentation`,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: ["https://quantajs.com/img/quantajs_banner.png"],
+    },
   };
 }
 

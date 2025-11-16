@@ -12,7 +12,44 @@ import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "QuantaJS Blogs - Latest Updates and Insights",
-  description: "Stay up to date with the latest QuantaJS developments, tutorials, and insights from the team. Learn about state management, React integration, and best practices.",
+  description: "Stay up to date with the latest QuantaJS developments, tutorials, and insights from the team. Learn about state management, React integration, Next.js integration, performance optimization, testing, and best practices.",
+  keywords: [
+    "QuantaJS",
+    "blog",
+    "tutorials",
+    "state management",
+    "javascript",
+    "typescript",
+    "react",
+    "nextjs",
+    "web development",
+    "programming",
+    "frontend development",
+  ],
+  alternates: {
+    canonical: "https://quantajs.com/blogs",
+  },
+  openGraph: {
+    title: "QuantaJS Blogs - Latest Updates and Insights",
+    description: "Stay up to date with the latest QuantaJS developments, tutorials, and insights. Learn about state management, React integration, and best practices.",
+    url: "https://quantajs.com/blogs",
+    type: "website",
+    siteName: "QuantaJS",
+    images: [
+      {
+        url: "https://quantajs.com/img/quantajs_banner.png",
+        width: 1200,
+        height: 630,
+        alt: "QuantaJS Blog - Latest Updates and Insights",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "QuantaJS Blogs - Latest Updates and Insights",
+    description: "Stay up to date with the latest QuantaJS developments, tutorials, and insights.",
+    images: ["https://quantajs.com/img/quantajs_banner.png"],
+  },
 };
 
 export default async function BlogIndexPage() {

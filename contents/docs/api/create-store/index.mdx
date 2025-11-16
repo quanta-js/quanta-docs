@@ -73,6 +73,8 @@ The returned store instance provides:
 - **subscribe**: Method to subscribe to store changes
 - **$reset**: Method to reset store to initial state
 - **$persist**: Persistence manager for manual persistence control (if persistence is configured)
+- **$destroy**: Method to clean up store resources and remove it from the registry
+- **notifyAll**: Method to manually notify all subscribers of changes
 
 ## TypeScript Support
 
@@ -107,11 +109,152 @@ const counterStore = createStore<CounterState, CounterGetters, CounterActions>('
 });
 ```
 
+## Store Lifecycle Methods
+
+### subscribe
+
+Subscribe to store changes:
+
+```javascript
+const store = createStore('counter', {
+  state: () => ({ count: 0 }),
+});
+
+const unsubscribe = store.subscribe((snapshot) => {
+  console.log('Store changed:', snapshot);
+});
+
+// Later, unsubscribe
+unsubscribe();
+```
+
+### $reset
+
+Reset the store to its initial state:
+
+```javascript
+const store = createStore('counter', {
+  state: () => ({ count: 0, name: 'Counter' }),
+});
+
+store.count = 10;
+store.name = 'Updated';
+
+store.$reset(); // Resets to { count: 0, name: 'Counter' }
+```
+
+### $destroy
+
+Clean up store resources and remove it from the registry. This is useful when you need to completely remove a store:
+
+```javascript
+const store = createStore('temporary', {
+  state: () => ({ data: [] }),
+  persist: {
+    adapter: new LocalStorageAdapter('temp-store'),
+  },
+});
+
+// Use the store...
+
+// When done, clean up
+store.$destroy(); // Removes store, clears subscribers, destroys persistence
+```
+
+**Note:** After calling `$destroy()`, the store should no longer be used. Attempting to use it may result in errors.
+
+### notifyAll
+
+Manually notify all subscribers of changes. This is typically used internally, but can be useful for advanced scenarios:
+
+```javascript
+const store = createStore('counter', {
+  state: () => ({ count: 0 }),
+});
+
+store.subscribe(() => {
+  console.log('Store updated');
+});
+
+// Manually trigger notification
+store.notifyAll(); // All subscribers are notified
+```
+
+## Store Lifecycle Management
+
+### Creating and Destroying Stores
+
+```javascript
+// Create a store
+const userStore = createStore('user', {
+  state: () => ({ user: null }),
+  persist: {
+    adapter: new LocalStorageAdapter('user-store'),
+  },
+});
+
+// Use the store throughout your application
+function login(user) {
+  userStore.user = user;
+}
+
+// When the store is no longer needed (e.g., logout, cleanup)
+function cleanup() {
+  userStore.$destroy(); // Clean up resources
+}
+```
+
+### Multiple Store Management
+
+```javascript
+// Create multiple stores
+const stores = {
+  user: createStore('user', {
+    state: () => ({ user: null }),
+  }),
+  cart: createStore('cart', {
+    state: () => ({ items: [] }),
+  }),
+  settings: createStore('settings', {
+    state: () => ({ theme: 'light' }),
+  }),
+};
+
+// Clean up all stores when needed
+function cleanupAllStores() {
+  Object.values(stores).forEach(store => {
+    store.$destroy();
+  });
+}
+```
+
+### React Integration with Cleanup
+
+```javascript
+import { useEffect } from 'react';
+import { useCreateStore } from '@quantajs/react';
+
+function Component() {
+  const store = useCreateStore('component-store', () => ({ data: [] }));
+  
+  useEffect(() => {
+    // Store is automatically cleaned up when component unmounts
+    // But you can manually clean up if needed
+    return () => {
+      store.$destroy();
+    };
+  }, []);
+  
+  return <div>{/* Component content */}</div>;
+}
+```
+
 ## Error Handling
 
 - **Duplicate Store Names**: Throws an error if a store with the same name already exists
 - **Invalid State**: State must be a function that returns an object
 - **Action Context**: Actions must use `this` to access store properties
+- **Destroyed Store**: Using a store after `$destroy()` may result in errors
 
 ## Learn More
 

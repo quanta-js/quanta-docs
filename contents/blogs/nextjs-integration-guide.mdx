@@ -84,7 +84,7 @@ import { userStore } from '@/lib/stores/user-store';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <QuantaProvider store={userStore}>
+    <QuantaProvider stores={{ user: userStore }}>
       {children}
     </QuantaProvider>
   );
@@ -123,7 +123,7 @@ Use QuantaJS hooks in client components:
 import { useStore } from '@quantajs/react';
 
 export function UserProfile() {
-  const store = useStore();
+  const store = useStore('user');
   
   if (!store.isLoggedIn) {
     return <div>Please log in</div>;
@@ -213,10 +213,8 @@ import { cartStore } from '@/lib/stores/cart-store';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <QuantaProvider store={userStore}>
-      <QuantaProvider store={cartStore}>
-        {children}
-      </QuantaProvider>
+    <QuantaProvider stores={{ user: userStore, cart: cartStore }}>
+      {children}
     </QuantaProvider>
   );
 }

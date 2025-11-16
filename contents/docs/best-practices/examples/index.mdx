@@ -578,7 +578,7 @@ const todoStore = createStore('todos', {
 
 // Todo Item Component
 function TodoItem({ todo }) {
-  const store = useStore();
+  const store = useStore('todos');
   
   return (
     <li style={{ 
@@ -641,7 +641,7 @@ function TodoFilter() {
   const pendingCount = useQuantaStore(todoStore, store => store.pendingCount);
   const totalCount = useQuantaStore(todoStore, store => store.todos.length);
   
-  const store = useStore();
+  const store = useStore('todos');
   
   return (
     <div style={{ 
@@ -732,7 +732,7 @@ function TodoFilter() {
 // Add Todo Component
 function AddTodo() {
   const [text, setText] = useState('');
-  const store = useStore();
+  const store = useStore('todos');
   
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -776,7 +776,7 @@ function TodoApp() {
 // App Component with Provider
 function App() {
   return (
-    <QuantaProvider store={todoStore}>
+    <QuantaProvider stores={{ todos: todoStore }}>
       <TodoApp />
     </QuantaProvider>
   );
@@ -877,7 +877,7 @@ const dashboardStore = createStore('dashboard', {
 function LoginForm() {
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
-  const store = useStore();
+  const store = useStore('user');
   
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -1042,7 +1042,7 @@ function RecentActivity() {
 // Dashboard Component
 function Dashboard() {
   const user = useQuantaStore(userStore, store => store.user);
-  const store = useStore();
+  const store = useStore('user');
   
   React.useEffect(() => {
     if (user) {
@@ -1086,10 +1086,8 @@ function App() {
   const isAuthenticated = useQuantaStore(userStore, store => store.isAuthenticated);
   
   return (
-    <QuantaProvider store={userStore}>
-      <QuantaProvider store={dashboardStore}>
-        {isAuthenticated ? <Dashboard /> : <LoginForm />}
-      </QuantaProvider>
+    <QuantaProvider stores={{ user: userStore, dashboard: dashboardStore }}>
+      {isAuthenticated ? <Dashboard /> : <LoginForm />}
     </QuantaProvider>
   );
 }

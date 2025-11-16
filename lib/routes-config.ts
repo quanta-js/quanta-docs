@@ -68,6 +68,7 @@ export const ROUTES: EachRoute[] = [
             { title: "computed", href: "/computed" },
             { title: "watch", href: "/watch" },
             { title: "Persistence", href: "/persistence", tag: "New!" },
+            { title: "Logger", href: "/logger" },
         ],
     },
     {

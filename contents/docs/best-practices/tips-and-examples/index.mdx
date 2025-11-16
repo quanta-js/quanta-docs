@@ -279,14 +279,14 @@ const counterStore = createStore('counter', {
 
 function App() {
   return (
-    <QuantaProvider store={counterStore}>
+    <QuantaProvider stores={{ counter: counterStore }}>
       <Counter />
     </QuantaProvider>
   );
 }
 
 function Counter() {
-  const store = useStore();
+  const store = useStore('counter');
   
   return (
     <div>
@@ -408,17 +408,15 @@ const todoStore = createStore('todos', {
 
 function App() {
   return (
-    <QuantaProvider store={userStore}>
-      <QuantaProvider store={todoStore}>
-        <UserDashboard />
-      </QuantaProvider>
+    <QuantaProvider stores={{ user: userStore, todos: todoStore }}>
+      <UserDashboard />
     </QuantaProvider>
   );
 }
 
 function UserDashboard() {
-  const userStore = useStore();
-  const todoStore = useStore();
+  const userStore = useStore('user');
+  const todoStore = useStore('todos');
   
   return (
     <div>
@@ -433,7 +431,7 @@ function UserDashboard() {
 
 ```javascript
 function useUser() {
-  const store = useStore();
+  const store = useStore('user');
   
   return {
     user: store.user,
@@ -445,7 +443,7 @@ function useUser() {
 }
 
 function useTodos() {
-  const store = useStore();
+  const store = useStore('todos');
   
   return {
     todos: store.todos,

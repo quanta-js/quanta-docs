@@ -181,6 +181,7 @@ interface PersistenceManager {
   clear(): Promise<void>;
   getAdapter(): PersistenceAdapter;
   isRehydrated(): boolean;
+  destroy(): void;
 }
 ```
 
@@ -191,6 +192,7 @@ interface PersistenceManager {
 - **`clear()`**: Remove all persisted data
 - **`getAdapter()`**: Get the underlying storage adapter
 - **`isRehydrated()`**: Check if initial data has been loaded
+- **`destroy()`**: Clean up persistence resources (stops watchers, removes cross-tab sync, cancels pending saves)
 
 ## Basic Usage
 

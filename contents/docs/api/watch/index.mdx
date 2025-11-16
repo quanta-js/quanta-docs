@@ -11,17 +11,24 @@ Watches for changes in reactive state and executes a callback when changes occur
 ## Signature
 
 ```typescript
-function watch<T>(source: () => T, callback: (value: T) => void): void;
+function watch<T>(
+  source: () => T,
+  callback: (value: T, oldValue?: T) => void,
+  options?: { deep?: boolean; immediate?: boolean }
+): () => void;
 ```
 
 ## Parameters
 
 - `source`: A function that returns the value to watch. This function is automatically tracked for dependencies.
-- `callback`: A function that executes when the watched value changes. Receives the new value as a parameter.
+- `callback`: A function that executes when the watched value changes. Receives the new value and optionally the old value as parameters.
+- `options` (optional): Configuration options:
+  - `deep`: Whether to perform deep watching (defaults to `false`). When `true`, uses polling to detect nested changes.
+  - `immediate`: Whether to invoke the callback immediately upon setup (defaults to `true`).
 
 ## Returns
 
-`void` - The watch function doesn't return anything.
+A cleanup function that stops the watcher when called.
 
 ## Basic Usage
 
@@ -33,18 +40,22 @@ const state = reactive({
   name: 'Quanta',
 });
 
-// Watch a single value
-watch(() => state.count, (newValue) => {
-  console.log(`Count changed to: ${newValue}`);
+// Watch a single value (callback runs immediately by default)
+const unwatchCount = watch(() => state.count, (newValue, oldValue) => {
+  console.log(`Count changed from ${oldValue} to ${newValue}`);
 });
 
 // Watch another value
-watch(() => state.name, (newValue) => {
+const unwatchName = watch(() => state.name, (newValue) => {
   console.log(`Name changed to: ${newValue}`);
 });
 
-state.count = 5; // Logs: "Count changed to: 5"
+state.count = 5; // Logs: "Count changed from 0 to 5"
 state.name = 'QuantaJS'; // Logs: "Name changed to: QuantaJS"
+
+// Stop watching when done
+unwatchCount();
+unwatchName();
 ```
 
 ## Watching Multiple Values
@@ -346,40 +357,84 @@ watch(() => appState.language, (language) => {
   localStorage.setItem('language', language);
 });
 
-// Sync all preferences
-watch(() => appState.preferences, (preferences) => {
+// Sync all preferences with deep watching
+const unwatchPreferences = watch(() => appState.preferences, (preferences) => {
   localStorage.setItem('preferences', JSON.stringify(preferences));
 }, { deep: true });
+
+// Clean up when component unmounts
+// unwatchPreferences();
 ```
 
-## Limitations
+## Watch Options
 
-### No Cleanup Function
+### Immediate Execution
 
-The current watch implementation doesn't return a cleanup function:
+By default, watch executes the callback immediately when set up. You can disable this behavior:
 
 ```javascript
-// ❌ This doesn't work as expected
+const state = reactive({ count: 0 });
+
+// Execute immediately (default)
+watch(() => state.count, (value) => {
+  console.log(value); // Runs immediately with current value
+});
+
+// Don't execute immediately
+watch(() => state.count, (value) => {
+  console.log(value); // Only runs when count changes
+}, { immediate: false });
+```
+
+### Deep Watching
+
+For deep watching of nested objects, use the `deep` option. This uses polling to detect changes:
+
+```javascript
+const state = reactive({
+  user: {
+    profile: {
+      name: 'John',
+      email: 'john@example.com',
+    },
+  },
+});
+
+// Shallow watch (default) - only detects direct property changes
+watch(() => state.user, (user) => {
+  console.log('User object reference changed');
+});
+
+// Deep watch - detects nested property changes via polling
+const unwatch = watch(() => state.user, (user) => {
+  console.log('User or nested properties changed');
+}, { deep: true });
+
+// Changes to nested properties will trigger the callback
+state.user.profile.name = 'Jane'; // Triggers deep watch
+
+// Clean up when done
+unwatch();
+```
+
+**Note:** Deep watching uses polling (every 100ms by default) and may have performance implications for large objects. Prefer shallow watching when possible.
+
+## Cleanup
+
+Watch returns a cleanup function that stops the watcher:
+
+```javascript
+const state = reactive({ count: 0 });
+
 const unwatch = watch(() => state.count, (value) => {
   console.log(value);
 });
 
-// No cleanup function available
-// unwatch(); // This doesn't exist
-```
+// Later, stop watching
+unwatch();
 
-### No Immediate Option
-
-Watch doesn't have an immediate option like some other libraries:
-
-```javascript
-// ❌ No immediate option
-// watch(() => state.count, callback, { immediate: true });
-
-// ✅ Use a separate call for immediate execution
-const callback = (value) => console.log(value);
-callback(state.count); // Execute immediately
-watch(() => state.count, callback); // Then watch for changes
+// After unwatch, changes won't trigger the callback
+state.count = 5; // No log output
 ```
 
 ## Learn More

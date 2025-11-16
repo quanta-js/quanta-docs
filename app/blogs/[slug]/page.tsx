@@ -12,6 +12,7 @@ import { notFound } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatDate } from "@/lib/utils";
 import Image from "next/image";
+import { StructuredData, generateBlogPostingStructuredData } from "@/components/structured-data";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -22,20 +23,54 @@ export async function generateMetadata(props: PageProps) {
   const { slug } = params;
   const res = await getBlogFrontmatter(slug);
   if (!res) return {};
-  const { title, description } = res;
+  const { title, description, date, authors, cover } = res;
+  
+  const blogTitle = `${title} | QuantaJS Blog`;
+  const url = `https://quantajs.com/blogs/${slug}`;
+  
+  // Generate keywords from title
+  const keywords = [
+    "QuantaJS",
+    "blog",
+    "tutorial",
+    "guide",
+    "state management",
+    "javascript",
+    "typescript",
+    ...title.toLowerCase().split(" ").filter(word => word.length > 3),
+  ];
+
   return {
-    title: `${title} | QuantaJS Blog`,
+    title: blogTitle,
     description,
+    keywords,
+    authors: authors?.map(author => ({ name: author.username })),
+    alternates: {
+      canonical: url,
+    },
     openGraph: {
-      title: `${title} | QuantaJS Blog`,
+      title: blogTitle,
       description,
+      url,
       type: "article",
       siteName: "QuantaJS",
+      publishedTime: date,
+      authors: authors?.map(author => author.username),
+      images: [
+        {
+          url: cover || "https://quantajs.com/img/quantajs_banner.png",
+          width: 1200,
+          height: 630,
+          alt: title,
+        },
+      ],
     },
     twitter: {
       card: "summary_large_image",
-      title: `${title} | QuantaJS Blog`,
+      title: blogTitle,
       description,
+      images: [cover || "https://quantajs.com/img/quantajs_banner.png"],
+      creator: authors?.[0]?.handle ? `@${authors[0].handle}` : "@quantajs",
     },
   };
 }
@@ -53,10 +88,23 @@ export default async function BlogPage(props: PageProps) {
   const res = await getCompiledBlogForSlug(slug);
   if (!res) notFound();
 
+  const url = `https://quantajs.com/blogs/${slug}`;
+  const structuredData = generateBlogPostingStructuredData(
+    res.frontmatter.title,
+    res.frontmatter.description,
+    url,
+    res.frontmatter.date,
+    undefined,
+    res.frontmatter.authors?.map(a => ({ name: a.username, url: a.handleUrl })),
+    res.frontmatter.cover
+  );
+
   // Force client-side rendering for the persistence blog post to avoid SSR issues
   if (slug === 'persistence-in-real-world') {
     return (
-      <div className="lg:w-[70%] sm:w-[95%] md:w-[80%] mx-auto">
+      <>
+        <StructuredData type="BlogPosting" data={structuredData} />
+        <div className="lg:w-[70%] sm:w-[95%] md:w-[80%] mx-auto">
         <Link
           className={buttonVariants({
             variant: "link",
@@ -93,11 +141,14 @@ export default async function BlogPage(props: PageProps) {
           </div>
         </div>
       </div>
+      </>
     );
   }
 
   return (
-    <div className="lg:w-[70%] sm:w-[95%] md:w-[80%] mx-auto">
+    <>
+      <StructuredData type="BlogPosting" data={structuredData} />
+      <div className="lg:w-[70%] sm:w-[95%] md:w-[80%] mx-auto">
       <Link
         className={buttonVariants({
           variant: "link",
@@ -134,6 +185,7 @@ export default async function BlogPage(props: PageProps) {
         </div>
       </div>
     </div>
+    </>
   );
 }
 

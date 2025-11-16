@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { readdirSync, statSync } from 'fs';
 import path from 'path';
+import { getAllBlogsFrontmatter } from '@/lib/markdown';
 
 // Base URL for your site
 const baseUrl = 'https://quantajs.com';
@@ -45,6 +46,36 @@ function getDocSlugs() {
   }
 }
 
+// Function to get all blog slugs
+async function getBlogSlugs() {
+  try {
+    const blogs = await getAllBlogsFrontmatter();
+    const blogDir = path.join(process.cwd(), 'contents', 'blogs');
+    
+    return blogs.map((blog) => {
+      const blogFile = path.join(blogDir, `${blog.slug}.mdx`);
+      let lastmod = blog.date || new Date().toISOString().split('T')[0];
+      
+      try {
+        const stats = statSync(blogFile);
+        lastmod = stats.mtime.toISOString().split('T')[0];
+      } catch {
+        // Use date from frontmatter if file stats unavailable
+      }
+      
+      return {
+        url: `/blogs/${blog.slug}`,
+        changefreq: 'monthly' as const,
+        priority: 0.8,
+        lastmod,
+      };
+    });
+  } catch (error) {
+    console.error('Error reading blogs directory:', error);
+    return [];
+  }
+}
+
 export async function GET() {
   // Static pages
   const staticPages = [
@@ -52,23 +83,24 @@ export async function GET() {
       url: '/',
       changefreq: 'daily' as const,
       priority: 1.0,
-      lastmod: '2025-03-10',
+      lastmod: new Date().toISOString().split('T')[0],
     },
     {
       url: '/blogs',
       changefreq: 'weekly' as const,
-      priority: 0.7,
-      lastmod: '2025-08-03',
+      priority: 0.8,
+      lastmod: new Date().toISOString().split('T')[0],
     },
-
-    // Add other static pages (e.g., /about) here
   ];
 
   // Dynamic pages from contents/docs/
   const dynamicPages = getDocSlugs();
+  
+  // Blog posts
+  const blogPages = await getBlogSlugs();
 
   // Combine all pages
-  const allPages = [...staticPages, ...dynamicPages];
+  const allPages = [...staticPages, ...dynamicPages, ...blogPages];
 
   // Generate sitemap manually to avoid trailing slashes
   let sitemapString = '<?xml version="1.0" encoding="UTF-8"?>\n';

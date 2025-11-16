@@ -66,7 +66,7 @@ const counterStore = createStore('counter', {
 });
 
 function Counter() {
-  const store = useStore();
+  const store = useStore('counter');
   
   return (
     <div>
@@ -80,7 +80,7 @@ function Counter() {
 
 function App() {
   return (
-    <QuantaProvider store={counterStore}>
+    <QuantaProvider stores={{ counter: counterStore }}>
       <Counter />
     </QuantaProvider>
   );
@@ -98,8 +98,8 @@ function App() {
 
 ### React Package
 - Same store creation API as core package
-- `QuantaProvider` wraps your app to provide the store to all child components
-- `useStore` hook accesses the store from context and triggers re-renders when state changes
+- `QuantaProvider` wraps your app to provide stores to all child components via the `stores` prop (object)
+- `useStore(name)` hook accesses a store by name from context and triggers re-renders when state changes
 - Components automatically re-render when store state updates
 
 ## Performance Optimization
@@ -107,10 +107,17 @@ function App() {
 For React applications, you can use selectors to prevent unnecessary re-renders:
 
 ```javascript
-import { useQuantaStore } from '@quantajs/react';
+import { useStore, useQuantaStore } from '@quantajs/react';
 
 function CounterDisplay() {
-  // Only re-render when count changes
+  // Using useStore with selector (only re-render when count changes)
+  const count = useStore('counter', store => store.count);
+  
+  return <p>Count: {count}</p>;
+}
+
+// Or using useQuantaStore with a direct store reference
+function CounterDisplayAlt() {
   const count = useQuantaStore(counterStore, store => store.count);
   
   return <p>Count: {count}</p>;

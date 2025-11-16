@@ -79,14 +79,14 @@ import { QuantaProvider, useStore, useQuantaStore } from '@quantajs/react';
 
 function App() {
   return (
-    <QuantaProvider store={counterStore}>
+    <QuantaProvider stores={{ counter: counterStore }}>
       <Counter />
     </QuantaProvider>
   );
 }
 
 function Counter() {
-  const store = useStore();
+  const store = useStore('counter');
   return (
     <div>
       <p>Count: {store.count}</p>

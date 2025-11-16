@@ -1,0 +1,752 @@
+---
+title: "Common QuantaJS Mistakes and How to Avoid Them"
+description: "Learn about the most common mistakes developers make with QuantaJS and how to fix them. Real-world solutions and best practices to save you time and frustration."
+date: "16-11-2025"
+authors:
+  - username: "Jeel Gajera"
+    handle: "JeelGajera"
+    handleUrl: "https://github.com/JeelGajera"
+    avatar: "https://avatars.githubusercontent.com/u/83470656?v=4"
+cover: "https://images.unsplash.com/photo-1664140546022-33b569e69655?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+---
+
+# Common QuantaJS Mistakes and How to Avoid Them
+
+Every developer encounters pitfalls when learning a new library. Based on real-world usage and community feedback, we've compiled the most common mistakes developers make with QuantaJS and how to avoid them. This guide will save you hours of debugging and frustration!
+
+## 1. Forgetting to Use `this` in Actions
+
+### ❌ The Mistake
+
+```javascript
+const store = createStore('counter', {
+  state: () => ({ count: 0 }),
+  actions: {
+    increment() {
+      count++; // ❌ Error: count is not defined
+    },
+  },
+});
+```
+
+### ✅ The Solution
+
+Always use `this` to access store properties in actions:
+
+```javascript
+const store = createStore('counter', {
+  state: () => ({ count: 0 }),
+  actions: {
+    increment() {
+      this.count++; // ✅ Correct
+    },
+  },
+});
+```
+
+### Why This Happens
+
+Actions are bound to the store instance, so you must use `this` to access state, getters, and other actions. This is similar to class methods in JavaScript.
+
+## 2. Not Providing Store Name to useStore
+
+### ❌ The Mistake
+
+```javascript
+function Counter() {
+  const store = useStore(); // ❌ Error: Store name required
+  return <div>{store.count}</div>;
+}
+```
+
+### ✅ The Solution
+
+Always provide the store name:
+
+```javascript
+function Counter() {
+  const store = useStore('counter'); // ✅ Correct
+  return <div>{store.count}</div>;
+}
+```
+
+### Alternative: Using Selectors
+
+```javascript
+function Counter() {
+  const count = useStore('counter', store => store.count); // ✅ Even better
+  return <div>{count}</div>;
+}
+```
+
+## 3. Incorrect QuantaProvider Setup
+
+### ❌ The Mistake
+
+```javascript
+function App() {
+  return (
+    <QuantaProvider store={counterStore}> {/* ❌ Wrong prop name */}
+      <Counter />
+    </QuantaProvider>
+  );
+}
+```
+
+### ✅ The Solution
+
+Use the `stores` prop (plural) with an object:
+
+```javascript
+function App() {
+  return (
+    <QuantaProvider stores={{ counter: counterStore }}> {/* ✅ Correct */}
+      <Counter />
+    </QuantaProvider>
+  );
+}
+```
+
+### Multiple Stores
+
+```javascript
+function App() {
+  return (
+    <QuantaProvider stores={{ 
+      user: userStore, 
+      cart: cartStore,
+      settings: settingsStore 
+    }}>
+      <App />
+    </QuantaProvider>
+  );
+}
+```
+
+## 4. Mutating State Directly Instead of Using Actions
+
+### ❌ The Mistake
+
+```javascript
+// Direct mutation - works but breaks reactivity tracking
+store.todos.push(newTodo); // ❌ May cause issues
+store.user.name = 'New Name'; // ❌ May not trigger updates
+```
+
+### ✅ The Solution
+
+Use actions for state mutations:
+
+```javascript
+const store = createStore('todos', {
+  state: () => ({ todos: [] }),
+  actions: {
+    addTodo(todo) {
+      this.todos.push(todo); // ✅ Inside action, reactivity is tracked
+    },
+    updateUserName(name) {
+      this.user.name = name; // ✅ Properly tracked
+    },
+  },
+});
+
+// Use actions
+store.addTodo(newTodo); // ✅ Correct
+store.updateUserName('New Name'); // ✅ Correct
+```
+
+### When Direct Mutation is OK
+
+Direct mutation is fine for simple cases, but actions provide:
+- Better debugging
+- Consistent patterns
+- Easier testing
+- Clearer intent
+
+## 5. Not Understanding Computed Values (Getters)
+
+### ❌ The Mistake
+
+```javascript
+// Expensive calculation in component
+function TodoStats() {
+  const todos = useStore('todos', store => store.todos);
+  const completed = todos.filter(t => t.done).length; // ❌ Recalculates every render
+  return <div>Completed: {completed}</div>;
+}
+```
+
+### ✅ The Solution
+
+Use getters for computed values:
+
+```javascript
+const todoStore = createStore('todos', {
+  state: () => ({ todos: [] }),
+  getters: {
+    completedCount: (state) => state.todos.filter(t => t.done).length, // ✅ Cached
+    activeCount: (state) => state.todos.filter(t => !t.done).length,
+  },
+});
+
+function TodoStats() {
+  const completed = useStore('todos', store => store.completedCount); // ✅ Uses cached value
+  return <div>Completed: {completed}</div>;
+}
+```
+
+## 6. Watching Entire Stores Instead of Specific Values
+
+### ❌ The Mistake
+
+```javascript
+// Watches entire store - triggers on ANY change
+watch(() => appStore, (store) => { // ❌ Too broad
+  console.log('Store changed');
+});
+```
+
+### ✅ The Solution
+
+Watch specific values:
+
+```javascript
+// Watch specific property
+watch(() => appStore.currentView, (view) => { // ✅ Specific
+  console.log('View changed:', view);
+});
+
+// Watch multiple specific values
+watch(() => ({
+  view: appStore.currentView,
+  user: appStore.user?.id,
+}), (values) => {
+  console.log('Relevant values changed:', values);
+});
+```
+
+## 7. Not Cleaning Up Watchers
+
+### ❌ The Mistake
+
+```javascript
+useEffect(() => {
+  watch(() => store.value, (value) => {
+    console.log(value);
+  });
+  // ❌ No cleanup - watcher continues after unmount
+}, []);
+```
+
+### ✅ The Solution
+
+Always clean up watchers:
+
+```javascript
+useEffect(() => {
+  const unwatch = watch(() => store.value, (value) => {
+    console.log(value);
+  });
+  
+  return () => {
+    unwatch(); // ✅ Cleanup
+  };
+}, []);
+```
+
+## 8. Incorrect Persistence Configuration
+
+### ❌ The Mistake
+
+```javascript
+// Persisting everything, including large objects
+const store = createStore('app', {
+  state: () => ({
+    user: { /* large object */ },
+    cache: new Map(), // ❌ Can't serialize Map
+    temporaryData: [], // ❌ Don't need to persist
+  }),
+  persist: {
+    adapter: new LocalStorageAdapter('app'),
+    // ❌ Persists everything, including non-serializable data
+  },
+});
+```
+
+### ✅ The Solution
+
+Use selective persistence:
+
+```javascript
+const store = createStore('app', {
+  state: () => ({
+    user: { /* large object */ },
+    cache: new Map(),
+    temporaryData: [],
+  }),
+  persist: {
+    adapter: new LocalStorageAdapter('app'),
+    include: ['user'], // ✅ Only persist what's needed
+    exclude: ['cache', 'temporaryData'], // ✅ Explicitly exclude
+    debounceMs: 300, // ✅ Debounce saves
+  },
+});
+```
+
+## 9. Store Name Conflicts
+
+### ❌ The Mistake
+
+```javascript
+// Creating stores with the same name
+const store1 = createStore('user', { /* ... */ });
+const store2 = createStore('user', { /* ... */ }); // ❌ Error: Duplicate name
+```
+
+### ✅ The Solution
+
+Use unique store names:
+
+```javascript
+const userStore = createStore('user', { /* ... */ });
+const userPreferencesStore = createStore('user-preferences', { /* ... */ }); // ✅ Unique
+```
+
+### Best Practice: Use Descriptive Names
+
+```javascript
+// ✅ Good naming
+const shoppingCartStore = createStore('shopping-cart', { /* ... */ });
+const userProfileStore = createStore('user-profile', { /* ... */ });
+const appSettingsStore = createStore('app-settings', { /* ... */ });
+```
+
+## 10. Not Handling Async Actions Properly
+
+### ❌ The Mistake
+
+```javascript
+const store = createStore('user', {
+  state: () => ({ user: null, error: null }),
+  actions: {
+    async login(credentials) {
+      const user = await api.login(credentials); // ❌ No error handling
+      this.user = user; // ❌ No loading state
+    },
+  },
+});
+```
+
+### ✅ The Solution
+
+Handle async actions with proper error handling and loading states:
+
+```javascript
+const store = createStore('user', {
+  state: () => ({ 
+    user: null, 
+    error: null,
+    isLoading: false,
+  }),
+  actions: {
+    async login(credentials) {
+      this.isLoading = true;
+      this.error = null;
+      
+      try {
+        const user = await api.login(credentials);
+        this.user = user;
+      } catch (error) {
+        this.error = error.message;
+      } finally {
+        this.isLoading = false;
+      }
+    },
+  },
+});
+```
+
+## 11. Subscribing to Entire Store When Only Needing Specific Values
+
+### ❌ The Mistake
+
+```javascript
+function UserName() {
+  const store = useStore('user'); // ❌ Subscribes to entire store
+  return <div>{store.name}</div>; // Only needs name
+}
+```
+
+### ✅ The Solution
+
+Use selectors for fine-grained subscriptions:
+
+```javascript
+function UserName() {
+  const name = useStore('user', store => store.name); // ✅ Only subscribes to name
+  return <div>{name}</div>;
+}
+```
+
+### Performance Impact
+
+```javascript
+// ❌ Bad: Re-renders on ANY user store change
+function UserProfile() {
+  const store = useStore('user');
+  return (
+    <div>
+      <div>Name: {store.name}</div>
+      <div>Email: {store.email}</div>
+    </div>
+  );
+}
+
+// ✅ Good: Only re-renders when name or email changes
+function UserProfile() {
+  const name = useStore('user', store => store.name);
+  const email = useStore('user', store => store.email);
+  return (
+    <div>
+      <div>Name: {name}</div>
+      <div>Email: {email}</div>
+    </div>
+  );
+}
+```
+
+## 12. Not Using TypeScript Types Correctly
+
+### ❌ The Mistake
+
+```javascript
+// No type safety
+const store = createStore('user', {
+  state: () => ({ user: null }),
+  actions: {
+    login(user) {
+      this.user = user; // ❌ No type checking
+    },
+  },
+});
+```
+
+### ✅ The Solution
+
+Use TypeScript for type safety:
+
+```typescript
+interface User {
+  id: string;
+  name: string;
+  email: string;
+}
+
+interface UserState {
+  user: User | null;
+  isLoading: boolean;
+}
+
+interface UserActions {
+  login(user: User): void;
+  logout(): void;
+}
+
+const userStore = createStore<UserState, {}, UserActions>('user', {
+  state: (): UserState => ({
+    user: null,
+    isLoading: false,
+  }),
+  actions: {
+    login(user: User) {
+      this.user = user; // ✅ Type-safe
+    },
+    logout() {
+      this.user = null;
+    },
+  },
+});
+```
+
+## 13. Creating Stores Inside Components
+
+### ❌ The Mistake
+
+```javascript
+function Counter() {
+  // ❌ Creates new store on every render!
+  const store = createStore('counter', {
+    state: () => ({ count: 0 }),
+  });
+  
+  return <div>{store.count}</div>;
+}
+```
+
+### ✅ The Solution
+
+Create stores outside components or use `useCreateStore`:
+
+```javascript
+// ✅ Create outside component
+const counterStore = createStore('counter', {
+  state: () => ({ count: 0 }),
+});
+
+function Counter() {
+  const store = useStore('counter');
+  return <div>{store.count}</div>;
+}
+
+// OR use useCreateStore for component-scoped stores
+function Counter() {
+  const store = useCreateStore('counter', () => ({ count: 0 }));
+  return <div>{store.count}</div>;
+}
+```
+
+## 14. Not Understanding Deep Watching Performance
+
+### ❌ The Mistake
+
+```javascript
+// Using deep watch unnecessarily
+watch(() => store.settings, (settings) => {
+  // ...
+}, { deep: true }); // ❌ Uses polling, can be slow
+```
+
+### ✅ The Solution
+
+Use deep watching only when necessary, prefer specific property watching:
+
+```javascript
+// ✅ Better: Watch specific properties
+watch(() => store.settings.theme, (theme) => {
+  applyTheme(theme);
+});
+
+// Only use deep when you truly need it
+watch(() => store.complexNestedObject, (obj) => {
+  // ...
+}, { deep: true }); // ✅ Only when necessary
+```
+
+## 15. Forgetting to Reset Stores in Tests
+
+### ❌ The Mistake
+
+```javascript
+describe('Store Tests', () => {
+  const store = createStore('test', {
+    state: () => ({ count: 0 }),
+  });
+
+  it('test 1', () => {
+    store.count = 5;
+    expect(store.count).toBe(5);
+  });
+
+  it('test 2', () => {
+    // ❌ store.count is still 5 from previous test!
+    expect(store.count).toBe(0); // Fails!
+  });
+});
+```
+
+### ✅ The Solution
+
+Reset stores between tests:
+
+```javascript
+describe('Store Tests', () => {
+  let store: ReturnType<typeof createStore>;
+
+  beforeEach(() => {
+    store = createStore('test', {
+      state: () => ({ count: 0 }),
+    });
+  });
+
+  it('test 1', () => {
+    store.count = 5;
+    expect(store.count).toBe(5);
+  });
+
+  it('test 2', () => {
+    store.$reset(); // ✅ Reset before test
+    expect(store.count).toBe(0); // ✅ Passes
+  });
+});
+```
+
+## 16. Not Handling Store Destruction
+
+### ❌ The Mistake
+
+```javascript
+// Creating temporary stores without cleanup
+function TemporaryComponent() {
+  const store = useCreateStore('temp', () => ({ data: [] }));
+  // ❌ Store persists even after component unmounts
+  return <div>{/* ... */}</div>;
+}
+```
+
+### ✅ The Solution
+
+Clean up stores when no longer needed:
+
+```javascript
+function TemporaryComponent() {
+  const store = useCreateStore('temp', () => ({ data: [] }));
+  
+  useEffect(() => {
+    return () => {
+      store.$destroy(); // ✅ Clean up on unmount
+    };
+  }, []);
+  
+  return <div>{/* ... */}</div>;
+}
+```
+
+## 17. Incorrect Selector Usage
+
+### ❌ The Mistake
+
+```javascript
+// Selector that creates new object every time
+function Component() {
+  const data = useStore('store', store => ({
+    a: store.a,
+    b: store.b,
+  })); // ❌ New object every time = always re-renders
+  return <div>{/* ... */}</div>;
+}
+```
+
+### ✅ The Solution
+
+Use stable selectors or select individual values:
+
+```javascript
+// ✅ Select individual values
+function Component() {
+  const a = useStore('store', store => store.a);
+  const b = useStore('store', store => store.b);
+  return <div>{/* ... */}</div>;
+}
+
+// OR use a getter for computed objects
+const store = createStore('store', {
+  state: () => ({ a: 1, b: 2 }),
+  getters: {
+    combined: (state) => ({ a: state.a, b: state.b }), // ✅ Cached
+  },
+});
+```
+
+## Quick Reference: Common Patterns
+
+### ✅ Good Patterns
+
+```javascript
+// 1. Use this in actions
+actions: {
+  increment() { this.count++; }
+}
+
+// 2. Use selectors
+const count = useStore('counter', store => store.count);
+
+// 3. Use getters for computed values
+getters: {
+  total: (state) => state.items.reduce((sum, item) => sum + item.price, 0)
+}
+
+// 4. Handle async properly
+async action() {
+  this.loading = true;
+  try {
+    // ...
+  } finally {
+    this.loading = false;
+  }
+}
+
+// 5. Clean up watchers
+useEffect(() => {
+  const unwatch = watch(/* ... */);
+  return () => unwatch();
+}, []);
+```
+
+### ❌ Anti-Patterns to Avoid
+
+```javascript
+// 1. Forgetting this
+actions: { increment() { count++; } } // ❌
+
+// 2. No store name
+useStore() // ❌
+
+// 3. Wrong provider prop
+<QuantaProvider store={store} /> // ❌
+
+// 4. Direct mutations everywhere
+store.todos.push(item) // ❌ (use actions)
+
+// 5. No cleanup
+watch(/* ... */) // ❌ (no cleanup)
+```
+
+## Debugging Tips
+
+### Enable Debug Logging
+
+```javascript
+import { logger, LogLevel } from '@quantajs/core';
+
+// In development
+if (process.env.NODE_ENV === 'development') {
+  logger.configure({
+    level: LogLevel.DEBUG,
+    prefix: 'QuantaJS',
+  });
+}
+```
+
+### Check Store State
+
+```javascript
+// Log store state
+console.log('Store state:', store.state);
+console.log('Store getters:', store.getters);
+```
+
+### Verify Subscriptions
+
+```javascript
+// Check if component is subscribed
+const store = useStore('counter');
+console.log('Subscribed to:', store);
+```
+
+## Conclusion
+
+Avoiding these common mistakes will make your QuantaJS development experience much smoother. Remember:
+
+- **Always use `this` in actions**
+- **Provide store names to `useStore`**
+- **Use `stores` prop (plural) for QuantaProvider**
+- **Use selectors for performance**
+- **Handle async actions properly**
+- **Clean up watchers and stores**
+- **Use TypeScript for type safety**
+
+Most importantly: **Read the error messages!** QuantaJS provides helpful error messages that will guide you to the solution.
+
+If you encounter issues not covered here, check our [documentation](/docs/getting-started/introduction) or reach out to the community.
+
+Happy coding! 🚀

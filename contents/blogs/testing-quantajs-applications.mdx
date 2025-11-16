@@ -1,0 +1,829 @@
+---
+title: "Testing QuantaJS Applications: A Comprehensive Guide"
+description: "Learn how to effectively test QuantaJS stores, actions, getters, and React components with practical examples and best practices."
+date: "16-11-2025"
+authors:
+  - username: "Jeel Gajera"
+    handle: "JeelGajera"
+    handleUrl: "https://github.com/JeelGajera"
+    avatar: "https://avatars.githubusercontent.com/u/83470656?v=4"
+cover: "https://images.unsplash.com/photo-1648161650882-dd482541e152?q=80&w=1332&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+---
+
+# Testing QuantaJS Applications: A Comprehensive Guide
+
+Testing is crucial for building reliable, maintainable applications. QuantaJS's framework-agnostic core and clear separation of concerns make it particularly testable. In this guide, we'll explore comprehensive strategies for testing QuantaJS applications, from unit testing stores to integration testing React components.
+
+## Why Test QuantaJS Applications?
+
+QuantaJS applications benefit from testing because:
+
+- **Framework-Agnostic Core**: Test stores independently without React
+- **Clear Separation**: State, getters, and actions are easily testable
+- **Predictable Behavior**: Reactive system has deterministic outcomes
+- **Type Safety**: TypeScript support enables better test coverage
+
+## Testing Setup
+
+### Basic Testing Environment
+
+```bash
+# Install testing dependencies
+npm install --save-dev vitest @testing-library/react @testing-library/jest-dom
+# or
+npm install --save-dev jest @testing-library/react @testing-library/jest-dom
+```
+
+### Vitest Configuration
+
+```typescript:vitest.config.ts
+import { defineConfig } from 'vitest/config';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.ts'],
+  },
+});
+```
+
+## 1. Testing Stores (Core Package)
+
+Since QuantaJS core is framework-agnostic, you can test stores without any React dependencies.
+
+### Testing Store State
+
+```typescript:__tests__/stores/counter-store.test.ts
+import { describe, it, expect, beforeEach } from 'vitest';
+import { createStore } from '@quantajs/core';
+
+describe('Counter Store', () => {
+  let counterStore: ReturnType<typeof createStore>;
+
+  beforeEach(() => {
+    counterStore = createStore('counter', {
+      state: () => ({ count: 0 }),
+      actions: {
+        increment() { this.count++; },
+        decrement() { this.count--; },
+        reset() { this.count = 0; },
+      },
+    });
+  });
+
+  it('should initialize with count 0', () => {
+    expect(counterStore.count).toBe(0);
+  });
+
+  it('should increment count', () => {
+    counterStore.increment();
+    expect(counterStore.count).toBe(1);
+  });
+
+  it('should decrement count', () => {
+    counterStore.count = 5;
+    counterStore.decrement();
+    expect(counterStore.count).toBe(4);
+  });
+
+  it('should reset count to 0', () => {
+    counterStore.count = 10;
+    counterStore.reset();
+    expect(counterStore.count).toBe(0);
+  });
+});
+```
+
+### Testing Getters (Computed Values)
+
+```typescript:__tests__/stores/todo-store.test.ts
+import { describe, it, expect, beforeEach } from 'vitest';
+import { createStore } from '@quantajs/core';
+
+describe('Todo Store Getters', () => {
+  let todoStore: ReturnType<typeof createStore>;
+
+  beforeEach(() => {
+    todoStore = createStore('todos', {
+      state: () => ({
+        todos: [
+          { id: 1, text: 'Learn QuantaJS', done: false },
+          { id: 2, text: 'Write tests', done: true },
+          { id: 3, text: 'Build app', done: false },
+        ],
+      }),
+      getters: {
+        activeTodos: (state) => state.todos.filter(t => !t.done),
+        completedTodos: (state) => state.todos.filter(t => t.done),
+        todoCount: (state) => state.todos.length,
+        completedCount: (state) => state.todos.filter(t => t.done).length,
+      },
+    });
+  });
+
+  it('should calculate active todos', () => {
+    expect(todoStore.activeTodos).toHaveLength(2);
+    expect(todoStore.activeTodos[0].text).toBe('Learn QuantaJS');
+  });
+
+  it('should calculate completed todos', () => {
+    expect(todoStore.completedTodos).toHaveLength(1);
+    expect(todoStore.completedTodos[0].text).toBe('Write tests');
+  });
+
+  it('should calculate total count', () => {
+    expect(todoStore.todoCount).toBe(3);
+  });
+
+  it('should calculate completed count', () => {
+    expect(todoStore.completedCount).toBe(1);
+  });
+
+  it('should update getters when state changes', () => {
+    todoStore.todos.push({ id: 4, text: 'New todo', done: false });
+    expect(todoStore.todoCount).toBe(4);
+    expect(todoStore.activeTodos).toHaveLength(3);
+  });
+});
+```
+
+### Testing Actions
+
+```typescript:__tests__/stores/user-store.test.ts
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { createStore } from '@quantajs/core';
+
+describe('User Store Actions', () => {
+  let userStore: ReturnType<typeof createStore>;
+
+  beforeEach(() => {
+    userStore = createStore('user', {
+      state: () => ({
+        user: null,
+        isLoading: false,
+        error: null,
+      }),
+      actions: {
+        async login(credentials) {
+          this.isLoading = true;
+          this.error = null;
+          
+          try {
+            // Simulate API call
+            const response = await fetch('/api/login', {
+              method: 'POST',
+              body: JSON.stringify(credentials),
+            });
+            
+            if (!response.ok) throw new Error('Login failed');
+            
+            this.user = await response.json();
+          } catch (error) {
+            this.error = error.message;
+          } finally {
+            this.isLoading = false;
+          }
+        },
+        
+        logout() {
+          this.user = null;
+          this.error = null;
+        },
+      },
+    });
+  });
+
+  it('should set loading state during login', async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ id: 1, name: 'John' }),
+      })
+    ) as any;
+
+    const loginPromise = userStore.login({ email: 'test@example.com', password: 'pass' });
+    
+    expect(userStore.isLoading).toBe(true);
+    await loginPromise;
+    expect(userStore.isLoading).toBe(false);
+  });
+
+  it('should set user on successful login', async () => {
+    const mockUser = { id: 1, name: 'John', email: 'john@example.com' };
+    
+    global.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(mockUser),
+      })
+    ) as any;
+
+    await userStore.login({ email: 'test@example.com', password: 'pass' });
+    
+    expect(userStore.user).toEqual(mockUser);
+    expect(userStore.error).toBeNull();
+  });
+
+  it('should handle login errors', async () => {
+    global.fetch = vi.fn(() =>
+      Promise.reject(new Error('Network error'))
+    ) as any;
+
+    await userStore.login({ email: 'test@example.com', password: 'pass' });
+    
+    expect(userStore.user).toBeNull();
+    expect(userStore.error).toBe('Network error');
+    expect(userStore.isLoading).toBe(false);
+  });
+
+  it('should clear user on logout', () => {
+    userStore.user = { id: 1, name: 'John' };
+    userStore.logout();
+    
+    expect(userStore.user).toBeNull();
+    expect(userStore.error).toBeNull();
+  });
+});
+```
+
+### Testing Store Subscriptions
+
+```typescript:__tests__/stores/subscription.test.ts
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { createStore } from '@quantajs/core';
+
+describe('Store Subscriptions', () => {
+  it('should notify subscribers on state changes', () => {
+    const store = createStore('test', {
+      state: () => ({ count: 0 }),
+      actions: {
+        increment() { this.count++; },
+      },
+    });
+
+    const subscriber = vi.fn();
+    const unsubscribe = store.subscribe(subscriber);
+
+    store.increment();
+    expect(subscriber).toHaveBeenCalledTimes(1);
+
+    store.increment();
+    expect(subscriber).toHaveBeenCalledTimes(2);
+
+    unsubscribe();
+    store.increment();
+    expect(subscriber).toHaveBeenCalledTimes(2); // No more calls
+  });
+
+  it('should pass state snapshot to subscribers', () => {
+    const store = createStore('test', {
+      state: () => ({ value: 'initial' }),
+      actions: {
+        update(value) { this.value = value; },
+      },
+    });
+
+    const receivedStates: string[] = [];
+    store.subscribe((snapshot) => {
+      receivedStates.push(snapshot.value);
+    });
+
+    store.update('updated');
+    store.update('final');
+
+    expect(receivedStates).toEqual(['updated', 'final']);
+  });
+});
+```
+
+## 2. Testing React Components
+
+### Testing Components with useStore
+
+```typescript:__tests__/components/Counter.test.tsx
+import { describe, it, expect, beforeEach } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { QuantaProvider } from '@quantajs/react';
+import { createStore } from '@quantajs/core';
+import { Counter } from '../Counter';
+
+describe('Counter Component', () => {
+  let counterStore: ReturnType<typeof createStore>;
+
+  beforeEach(() => {
+    counterStore = createStore('counter', {
+      state: () => ({ count: 0 }),
+      actions: {
+        increment() { this.count++; },
+        decrement() { this.count--; },
+      },
+    });
+  });
+
+  it('should display initial count', () => {
+    render(
+      <QuantaProvider stores={{ counter: counterStore }}>
+        <Counter />
+      </QuantaProvider>
+    );
+
+    expect(screen.getByText('Count: 0')).toBeInTheDocument();
+  });
+
+  it('should increment count on button click', () => {
+    render(
+      <QuantaProvider stores={{ counter: counterStore }}>
+        <Counter />
+      </QuantaProvider>
+    );
+
+    const incrementButton = screen.getByText('+');
+    fireEvent.click(incrementButton);
+
+    expect(screen.getByText('Count: 1')).toBeInTheDocument();
+  });
+
+  it('should decrement count on button click', () => {
+    counterStore.count = 5;
+    
+    render(
+      <QuantaProvider stores={{ counter: counterStore }}>
+        <Counter />
+      </QuantaProvider>
+    );
+
+    const decrementButton = screen.getByText('-');
+    fireEvent.click(decrementButton);
+
+    expect(screen.getByText('Count: 4')).toBeInTheDocument();
+  });
+});
+```
+
+### Testing Components with Selectors
+
+```typescript:__tests__/components/TodoList.test.tsx
+import { describe, it, expect, beforeEach } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { QuantaProvider } from '@quantajs/react';
+import { createStore } from '@quantajs/core';
+import { TodoList } from '../TodoList';
+
+describe('TodoList Component', () => {
+  let todoStore: ReturnType<typeof createStore>;
+
+  beforeEach(() => {
+    todoStore = createStore('todos', {
+      state: () => ({
+        todos: [
+          { id: 1, text: 'Todo 1', done: false },
+          { id: 2, text: 'Todo 2', done: true },
+        ],
+      }),
+      getters: {
+        activeTodos: (state) => state.todos.filter(t => !t.done),
+      },
+    });
+  });
+
+  it('should render active todos only', () => {
+    render(
+      <QuantaProvider stores={{ todos: todoStore }}>
+        <TodoList />
+      </QuantaProvider>
+    );
+
+    expect(screen.getByText('Todo 1')).toBeInTheDocument();
+    expect(screen.queryByText('Todo 2')).not.toBeInTheDocument();
+  });
+});
+```
+
+### Testing Custom Hooks
+
+```typescript:__tests__/hooks/useTodos.test.tsx
+import { describe, it, expect, beforeEach } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
+import { QuantaProvider } from '@quantajs/react';
+import { createStore } from '@quantajs/core';
+import { useTodos } from '../hooks/useTodos';
+
+describe('useTodos Hook', () => {
+  let todoStore: ReturnType<typeof createStore>;
+
+  beforeEach(() => {
+    todoStore = createStore('todos', {
+      state: () => ({ todos: [] }),
+      actions: {
+        addTodo(text) {
+          this.todos.push({ id: Date.now(), text, done: false });
+        },
+      },
+    });
+  });
+
+  it('should return todos from store', () => {
+    todoStore.todos = [{ id: 1, text: 'Test', done: false }];
+
+    const { result } = renderHook(() => useTodos(), {
+      wrapper: ({ children }) => (
+        <QuantaProvider stores={{ todos: todoStore }}>
+          {children}
+        </QuantaProvider>
+      ),
+    });
+
+    expect(result.current.todos).toHaveLength(1);
+    expect(result.current.todos[0].text).toBe('Test');
+  });
+
+  it('should add todo', () => {
+    const { result } = renderHook(() => useTodos(), {
+      wrapper: ({ children }) => (
+        <QuantaProvider stores={{ todos: todoStore }}>
+          {children}
+        </QuantaProvider>
+      ),
+    });
+
+    act(() => {
+      result.current.addTodo('New Todo');
+    });
+
+    expect(result.current.todos).toHaveLength(1);
+    expect(result.current.todos[0].text).toBe('New Todo');
+  });
+});
+```
+
+## 3. Testing Persistence
+
+### Testing Persistence Configuration
+
+```typescript:__tests__/persistence/persistence.test.ts
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { createStore, LocalStorageAdapter } from '@quantajs/core';
+
+describe('Store Persistence', () => {
+  beforeEach(() => {
+    // Clear localStorage before each test
+    localStorage.clear();
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+  });
+
+  it('should persist state to localStorage', async () => {
+    const store = createStore('test', {
+      state: () => ({ count: 0 }),
+      persist: {
+        adapter: new LocalStorageAdapter('test-store'),
+        debounceMs: 0, // No debounce for testing
+      },
+    });
+
+    store.count = 5;
+    
+    // Wait for persistence to complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    const persisted = JSON.parse(localStorage.getItem('test-store') || '{}');
+    expect(persisted.data.count).toBe(5);
+  });
+
+  it('should restore state from localStorage', async () => {
+    // Set up initial persisted state
+    localStorage.setItem('test-store', JSON.stringify({
+      data: { count: 10 },
+      version: 1,
+      timestamp: Date.now(),
+    }));
+
+    const store = createStore('test', {
+      state: () => ({ count: 0 }),
+      persist: {
+        adapter: new LocalStorageAdapter('test-store'),
+      },
+    });
+
+    // Wait for restoration
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    expect(store.count).toBe(10);
+  });
+
+  it('should use include/exclude filters', async () => {
+    const store = createStore('test', {
+      state: () => ({
+        persist: 'yes',
+        temporary: 'no',
+        cache: 'no',
+      }),
+      persist: {
+        adapter: new LocalStorageAdapter('test-store'),
+        include: ['persist'],
+        debounceMs: 0,
+      },
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    const persisted = JSON.parse(localStorage.getItem('test-store') || '{}');
+    expect(persisted.data.persist).toBe('yes');
+    expect(persisted.data.temporary).toBeUndefined();
+    expect(persisted.data.cache).toBeUndefined();
+  });
+});
+```
+
+## 4. Testing with Mocks and Fixtures
+
+### Creating Test Utilities
+
+```typescript:test-utils/store-helpers.ts
+import { createStore, StoreInstance } from '@quantajs/core';
+
+export function createTestStore<T extends object>(
+  name: string,
+  initialState: T
+) {
+  return createStore(name, {
+    state: () => initialState,
+  });
+}
+
+export function createMockStore<T extends object>(
+  initialState: T
+): StoreInstance<T, {}, {}> {
+  return {
+    ...initialState,
+    state: initialState,
+    getters: {},
+    actions: {},
+    subscribe: vi.fn(() => vi.fn()),
+    $reset: vi.fn(),
+  } as any;
+}
+```
+
+### Using Test Fixtures
+
+```typescript:__tests__/fixtures/todo-fixtures.ts
+export const mockTodos = [
+  { id: 1, text: 'Learn QuantaJS', done: false },
+  { id: 2, text: 'Write tests', done: true },
+  { id: 3, text: 'Build app', done: false },
+];
+
+export const createTodoStore = (initialTodos = mockTodos) => {
+  return createStore('todos', {
+    state: () => ({ todos: initialTodos }),
+    getters: {
+      activeTodos: (state) => state.todos.filter(t => !t.done),
+    },
+    actions: {
+      addTodo(text) {
+        this.todos.push({ id: Date.now(), text, done: false });
+      },
+    },
+  });
+};
+```
+
+## 5. Integration Testing
+
+### Testing Store Interactions
+
+```typescript:__tests__/integration/store-interactions.test.ts
+import { describe, it, expect, beforeEach } from 'vitest';
+import { createStore } from '@quantajs/core';
+
+describe('Store Interactions', () => {
+  let userStore: ReturnType<typeof createStore>;
+  let cartStore: ReturnType<typeof createStore>;
+
+  beforeEach(() => {
+    userStore = createStore('user', {
+      state: () => ({ user: null }),
+      actions: {
+        login(user) { this.user = user; },
+      },
+    });
+
+    cartStore = createStore('cart', {
+      state: () => ({ items: [] }),
+      actions: {
+        addItem(item) { this.items.push(item); },
+        clearCart() { this.items = []; },
+      },
+    });
+  });
+
+  it('should clear cart when user logs out', () => {
+    cartStore.items = [{ id: 1, name: 'Product' }];
+    userStore.user = { id: 1, name: 'John' };
+
+    // Simulate logout
+    userStore.user = null;
+    cartStore.clearCart();
+
+    expect(cartStore.items).toHaveLength(0);
+  });
+});
+```
+
+## 6. Testing Best Practices
+
+### ✅ Do's
+
+1. **Test Stores Independently**: Test core logic without React
+2. **Use Descriptive Test Names**: Clear test descriptions help debugging
+3. **Isolate Tests**: Each test should be independent
+4. **Test Edge Cases**: Empty states, errors, boundary conditions
+5. **Mock External Dependencies**: API calls, localStorage, etc.
+6. **Test Getters Separately**: Computed values should have dedicated tests
+7. **Test Actions in Isolation**: Verify state changes and side effects
+
+### ❌ Don'ts
+
+1. **Don't Test Implementation Details**: Test behavior, not internals
+2. **Don't Over-Mock**: Only mock what's necessary
+3. **Don't Test Framework Code**: Trust QuantaJS, test your code
+4. **Don't Skip Error Cases**: Test error handling thoroughly
+5. **Don't Create Complex Test Setup**: Keep tests simple and readable
+
+## 7. Testing Patterns
+
+### Pattern: Testing Async Actions
+
+```typescript
+it('should handle async actions correctly', async () => {
+  const store = createStore('test', {
+    state: () => ({ data: null, loading: false }),
+    actions: {
+      async fetchData() {
+        this.loading = true;
+        try {
+          this.data = await api.fetch();
+        } finally {
+          this.loading = false;
+        }
+      },
+    },
+  });
+
+  const promise = store.fetchData();
+  expect(store.loading).toBe(true);
+  
+  await promise;
+  expect(store.loading).toBe(false);
+  expect(store.data).toBeDefined();
+});
+```
+
+### Pattern: Testing Computed Dependencies
+
+```typescript
+it('should update computed values when dependencies change', () => {
+  const store = createStore('test', {
+    state: () => ({ a: 1, b: 2 }),
+    getters: {
+      sum: (state) => state.a + state.b,
+    },
+  });
+
+  expect(store.sum).toBe(3);
+  
+  store.a = 5;
+  expect(store.sum).toBe(7);
+});
+```
+
+### Pattern: Testing Store Reset
+
+```typescript
+it('should reset store to initial state', () => {
+  const store = createStore('test', {
+    state: () => ({ count: 0, name: 'Initial' }),
+  });
+
+  store.count = 10;
+  store.name = 'Changed';
+  
+  store.$reset();
+  
+  expect(store.count).toBe(0);
+  expect(store.name).toBe('Initial');
+});
+```
+
+## 8. Coverage and CI/CD
+
+### Coverage Configuration
+
+```typescript:vitest.config.ts
+export default defineConfig({
+  test: {
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      include: ['src/stores/**', 'src/components/**'],
+      exclude: ['**/*.test.ts', '**/*.test.tsx'],
+    },
+  },
+});
+```
+
+### Example Test Scripts
+
+```json:package.json
+{
+  "scripts": {
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage",
+    "test:watch": "vitest --watch"
+  }
+}
+```
+
+## Real-World Testing Example
+
+```typescript:__tests__/e2e/shopping-cart.test.ts
+import { describe, it, expect, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { QuantaProvider } from '@quantajs/react';
+import { createStore, LocalStorageAdapter } from '@quantajs/core';
+import { ShoppingCart } from '../ShoppingCart';
+
+describe('Shopping Cart E2E', () => {
+  let cartStore: ReturnType<typeof createStore>;
+
+  beforeEach(() => {
+    localStorage.clear();
+    cartStore = createStore('cart', {
+      state: () => ({ items: [], total: 0 }),
+      getters: {
+        itemCount: (state) => state.items.length,
+      },
+      actions: {
+        addItem(product) {
+          const existing = this.items.find(i => i.id === product.id);
+          if (existing) {
+            existing.quantity++;
+          } else {
+            this.items.push({ ...product, quantity: 1 });
+          }
+          this.total = this.items.reduce((sum, item) => 
+            sum + (item.price * item.quantity), 0
+          );
+        },
+      },
+      persist: {
+        adapter: new LocalStorageAdapter('cart'),
+        debounceMs: 0,
+      },
+    });
+  });
+
+  it('should add items to cart and persist', async () => {
+    render(
+      <QuantaProvider stores={{ cart: cartStore }}>
+        <ShoppingCart />
+      </QuantaProvider>
+    );
+
+    const addButton = screen.getByText('Add to Cart');
+    fireEvent.click(addButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Items: 1')).toBeInTheDocument();
+    });
+
+    // Verify persistence
+    const persisted = JSON.parse(localStorage.getItem('cart') || '{}');
+    expect(persisted.data.items).toHaveLength(1);
+  });
+});
+```
+
+## Conclusion
+
+Testing QuantaJS applications is straightforward thanks to its framework-agnostic core and clear architecture. By following these patterns and best practices, you can build comprehensive test suites that ensure your application's reliability and maintainability.
+
+Key takeaways:
+- **Test stores independently** from React components
+- **Use selectors** to test specific state slices
+- **Mock external dependencies** like APIs and storage
+- **Test both happy paths and error cases**
+- **Keep tests simple and focused**
+
+Remember: Good tests are a safety net that allows you to refactor and improve your code with confidence. Invest time in writing quality tests, and your future self will thank you!
+
+Happy testing! 🧪
+
