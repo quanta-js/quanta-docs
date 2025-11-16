@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { LocalStorageAdapter } from "@quantajs/core";
+import { LocalStorageAdapter, logger } from "@quantajs/core";
 import { createStore } from "@quantajs/react";
 
 export const userPreferencesStore = createStore("userPreferencesStore", {
@@ -66,6 +66,7 @@ export const shoppingCartStore = createStore("shoppingCartStore", {
                     this.removeItem(productId);
                 } else {
                     this.updateTotal();
+                    this.items = [...this.items]; // Reassign for array reactivity
                 }
             }
         },
@@ -129,41 +130,162 @@ export const formStore = createStore("formStore", {
     },
 });
 
-export const appStateStore = createStore("appStateStore", {
-    state: () => ({
-        currentView: "dashboard",
-        filters: {
-            category: "all",
-            status: "active",
-            dateRange: "week",
+// Types (new block)
+interface Task {
+    id: number;
+    title: string;
+    status: "pending" | "in-progress" | "done";
+    priority: "low" | "medium" | "high";
+    completed: boolean;
+}
+
+interface AppState {
+    currentView: "list" | "board" | "calendar";
+    filters: {
+        status: "all" | "pending" | "in-progress" | "done";
+        priority: "all" | "low" | "medium" | "high";
+    };
+    pagination: {
+        page: number;
+        limit: number;
+    };
+    sidebar: {
+        collapsed: boolean;
+        user: string;
+    };
+    tasks: Task[];
+}
+
+type AppGDefs = {
+    filteredTasks: (state: AppState) => Task[];
+};
+
+type AppRawActions = {
+    setView: (view: "list" | "board" | "calendar") => void;
+    updateFilters: (updates: Partial<AppState["filters"]>) => void;
+    setPage: (page: number) => void;
+    toggleSidebar: () => void;
+    addTask: (title: string) => void;
+    toggleTask: (id: number) => void;
+    updateTaskPriority: (id: number, priority: string) => void;
+};
+
+export const appStateStore = createStore<AppState, AppGDefs, AppRawActions>(
+    "appStateStore",
+    {
+        state: () => ({
+            currentView: "list" as "list" | "board" | "calendar",
+            filters: {
+                status: "all" as "all" | "pending" | "in-progress" | "done",
+                priority: "medium" as "all" | "low" | "medium" | "high",
+            },
+            pagination: {
+                page: 1,
+                limit: 5, // Small for demo pagination
+            },
+            sidebar: {
+                collapsed: false,
+                user: "Guest",
+            },
+            tasks: [
+                {
+                    id: 1,
+                    title: "Review PR",
+                    status: "in-progress",
+                    priority: "high",
+                    completed: false,
+                },
+                {
+                    id: 2,
+                    title: "Update docs",
+                    status: "pending",
+                    priority: "medium",
+                    completed: false,
+                },
+                {
+                    id: 3,
+                    title: "Fix bug",
+                    status: "done",
+                    priority: "low",
+                    completed: true,
+                },
+            ] as Task[],
+        }),
+        getters: {
+            filteredTasks: (state) => {
+                let tasks = state.tasks.length ? [...state.tasks] : []; // Copy for immutability
+                if (state.filters.status !== "all")
+                    tasks = tasks.filter(
+                        (t) => t.status === state.filters.status
+                    );
+                if (state.filters.priority !== "all")
+                    tasks = tasks.filter(
+                        (t) => t.priority === state.filters.priority
+                    );
+                return tasks;
+            },
         },
-        pagination: {
-            page: 1,
-            pageSize: 10,
+        actions: {
+            setView(view: "list" | "board" | "calendar") {
+                this.currentView = view;
+            },
+            updateFilters(updates: Partial<typeof this.filters>) {
+                this.filters = { ...this.filters, ...updates };
+                this.pagination.page = 1; // Reset pagination
+            },
+            setPage(page: number) {
+                this.pagination.page = Math.max(1, page);
+            },
+            toggleSidebar() {
+                this.sidebar.collapsed = !this.sidebar.collapsed;
+            },
+            addTask(title: string) {
+                const id = Date.now();
+                this.tasks.push({
+                    id,
+                    title,
+                    status: "pending",
+                    priority: "medium",
+                    completed: false,
+                });
+                this.tasks = [...this.tasks]; // Reassign for deep reactivity
+            },
+            toggleTask(id: number) {
+                const task = this.tasks.find((t) => t.id === id);
+                if (task) {
+                    task.completed = !task.completed;
+                    task.status = task.completed ? "done" : "in-progress";
+                    this.tasks = [...this.tasks]; // Trigger save
+                }
+            },
+            // Bonus: Update priority
+            updateTaskPriority(id: number, priority: string) {
+                const task = this.tasks.find((t) => t.id === id);
+                if (task) {
+                    task.priority = priority as "low" | "medium" | "high";
+                    this.tasks = [...this.tasks];
+                }
+            },
         },
-        sidebarCollapsed: false,
-    }),
-    actions: {
-        setView(view: string) {
-            this.currentView = view;
+        persist: {
+            adapter: new LocalStorageAdapter("app-state"),
+            debounceMs: 200,
+            include: ["currentView", "filters", "sidebar", "tasks"],
+            exclude: ["pagination"],
+            transform: {
+                out: (data) => {
+                    // Prune old completed tasks if >50 (demo cleanup)
+                    if (data.tasks?.length > 50) {
+                        data.tasks = data.tasks
+                            .filter((t: any) => !t.completed)
+                            .slice(0, 50);
+                    }
+                    return data;
+                },
+            },
         },
-        updateFilters(newFilters) {
-            this.filters = { ...this.filters, ...newFilters };
-            this.pagination.page = 1; // Reset to first page when filters change
-        },
-        setPage(page: number) {
-            this.pagination.page = page;
-        },
-        toggleSidebar() {
-            this.sidebarCollapsed = !this.sidebarCollapsed;
-        },
-    },
-    persist: {
-        adapter: new LocalStorageAdapter("app-state"),
-        debounceMs: 200,
-        exclude: ["pagination"],
-    },
-});
+    }
+);
 
 export const crossTabStore = createStore("crossTabStore", {
     state: () => ({
