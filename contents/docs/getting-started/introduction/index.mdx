@@ -27,12 +27,13 @@ The goal was simple: take the best parts of modern state management (reactive st
 - **Side Effects, Sorted**: Async actions feel natural, not forced. Fetch data, update state, and watch it flow.
 - **API That Clicks**: Learn it in minutes, master it in hours coding with QuantaJS feels like second nature.
 - **React Optimized**: Built-in React integration with hooks and components for seamless React development.
+- **DevTools Included**: Powerful debugging tools with real-time store inspection, action logging, and persistence management.
 
 QuantaJS combines simplicity with power, offering a lightweight alternative to traditional state management libraries. Whether you're building a small prototype or a large-scale app, QuantaJS adapts to your needs without unnecessary complexity.
 
 ## Package Structure
 
-QuantaJS is now split into two focused packages:
+QuantaJS is now split into focused packages:
 
 ### @quantajs/core
 The core state management library with reactivity system, perfect for any JavaScript environment.
@@ -48,9 +49,16 @@ React integration with hooks and components for seamless React development.
 import { useQuantaStore, QuantaProvider, useStore } from '@quantajs/react';
 ```
 
+### @quantajs/devtools
+Developer tools for debugging and inspecting stores in real-time. Works with any framework.
+
+```javascript
+import { mountDevTools } from '@quantajs/devtools';
+```
+
 ## The Spark That Started It All
 
-QuantaJS isn't just another library it's a rebellion against bloated, overcomplicated state management. Born from a desire to simplify without sacrificing power, it's your companion for building smarter, faster, and cleaner code. With the new package structure, you get exactly what you need core functionality for any environment and React-specific features when building React applications.
+QuantaJS isn't just another library it's a rebellion against bloated, overcomplicated state management. Born from a desire to simplify without sacrificing power, it's your companion for building smarter, faster, and cleaner code. With the new package structure, you get exactly what you need core functionality for any environment, React-specific features when building React applications, and powerful DevTools for debugging and development.
 
 ## A Taste of the Magic
 

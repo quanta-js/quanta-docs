@@ -1,0 +1,343 @@
+---
+title: DevTools
+description: Learn how to use QuantaJS DevTools to inspect stores, monitor state changes, and debug your application.
+---
+
+# DevTools
+
+QuantaJS DevTools provides a powerful visual debugging interface for inspecting stores, monitoring state changes, and tracking actions in real-time. Whether you're building a small prototype or a large-scale application, DevTools helps you understand and debug your state management with ease.
+
+<Callout type="info">
+DevTools automatically detects your development environment and won't mount in production builds, keeping your bundle size minimal.
+</Callout>
+
+## Features
+
+✅ **Real-time Store Inspector** – View live state, getters, and actions  
+✅ **Action Log** – Track all state mutations with timestamps and payloads  
+✅ **Auto-Detection** – Automatically detects development environment  
+✅ **Framework Agnostic** – Works with vanilla JS, React, or any framework  
+✅ **Modern UI** – Built with Preact and Tailwind CSS v4  
+✅ **Lightweight** – Minimal bundle size with tree-shaking support  
+✅ **Persistence Management** – View and manage persistence status for stores
+
+## Installation
+
+Install the DevTools package alongside the core library:
+
+```bash
+npm install @quantajs/devtools @quantajs/core
+# or
+yarn add @quantajs/devtools @quantajs/core
+# or
+pnpm add @quantajs/devtools @quantajs/core
+```
+
+## Quick Start
+
+### Automatic Mounting (Recommended)
+
+The DevTools automatically detect your development environment and mount themselves:
+
+```javascript
+import { createStore } from '@quantajs/core';
+import { mountDevTools } from '@quantajs/devtools';
+
+// Create your stores
+const counterStore = createStore('counter', {
+  state: () => ({ count: 0 }),
+  actions: {
+    increment() {
+      this.count++;
+    },
+  },
+});
+
+// Mount DevTools (auto-detects dev environment)
+mountDevTools();
+```
+
+That's it! The DevTools will appear as a floating button in the bottom-right corner of your application. Click it to open the full DevTools interface.
+
+### Manual Mounting with Options
+
+For more control, you can specify options when mounting:
+
+```javascript
+import { mountDevTools } from '@quantajs/devtools';
+
+// Force show DevTools (even in production)
+mountDevTools({ visible: true });
+
+// Mount to custom element
+mountDevTools({
+  visible: true,
+  target: document.getElementById('devtools-container'),
+});
+```
+
+## Using DevTools
+
+### Opening DevTools
+
+Once mounted, you'll see a floating button with the QuantaJS logo in the bottom-right corner of your application. Click it to open the DevTools panel.
+
+### Store Inspector
+
+The **Inspector** tab provides a comprehensive view of your stores:
+
+![DevTools Store Inspector](/img/devtool-inspector.png)
+
+#### State Viewing
+
+- **Live State**: See your store state update in real-time as you interact with your application
+- **Nested Objects**: Expandable tree view for complex state structures
+- **Color-Coded Values**: Different colors for keys, values, and types make it easy to scan
+
+#### Getters
+
+View all computed values (getters) alongside their current values. Getters are displayed with their computed results, making it easy to verify that your derived state is working correctly.
+
+#### Actions
+
+See all available actions for the selected store. You can even trigger actions directly from the DevTools by clicking the play button next to each action.
+
+#### Store Management
+
+- **Persistence Status**: See at a glance whether persistence is enabled for a store
+- **Clear Storage**: Remove persisted data from storage (useful for testing)
+- **Reset State**: Reset the store to its initial state values
+
+### Action Log
+
+The **Actions** tab provides a complete history of all actions that have been dispatched:
+
+![DevTools Action Log](/img/devtool-action-logs.png)
+
+- **Timestamps**: See exactly when each action was called
+- **Store Context**: Know which store each action belongs to
+- **Payloads**: View the arguments passed to each action
+- **Expandable Payloads**: Large payloads can be expanded to see full details
+- **Copy Payload**: Copy action payloads to clipboard for debugging
+
+The action log keeps track of the last 50 actions, giving you a comprehensive view of your application's state changes.
+
+## React Integration
+
+If you're using React, you can use the `QuantaDevTools` component from `@quantajs/react`:
+
+```tsx
+import React from 'react';
+import { QuantaDevTools } from '@quantajs/react';
+
+function App() {
+  return (
+    <div>
+      <YourApp />
+      <QuantaDevTools />
+    </div>
+  );
+}
+```
+
+The React component automatically handles mounting and unmounting, and integrates seamlessly with your React application.
+
+## Development vs Production
+
+### Automatic Environment Detection
+
+DevTools automatically detect your development environment:
+
+- **Vite**: Detects `import.meta.env.DEV`
+- **Webpack/Node**: Detects `process.env.NODE_ENV === 'development'`
+
+If neither is detected, DevTools won't mount by default.
+
+### Manual Control
+
+You can manually control DevTools visibility:
+
+```javascript
+// Force show in any environment
+mountDevTools({ visible: true });
+
+// Force hide even in development
+mountDevTools({ visible: false });
+```
+
+### Tree-Shaking
+
+For production builds, you can exclude DevTools entirely using conditional imports:
+
+```javascript
+if (process.env.NODE_ENV === 'development') {
+  import('@quantajs/devtools').then(({ mountDevTools }) => {
+    mountDevTools();
+  });
+}
+```
+
+Or with Vite:
+
+```javascript
+if (import.meta.env.DEV) {
+  import('@quantajs/devtools').then(({ mountDevTools }) => {
+    mountDevTools();
+  });
+}
+```
+
+## Advanced Usage
+
+### Custom Mount Target
+
+Mount DevTools to a specific element instead of the body:
+
+```javascript
+const container = document.getElementById('devtools-container');
+mountDevTools({ target: container });
+```
+
+### Cleanup
+
+The `mountDevTools` function returns a cleanup function that you can call to unmount DevTools:
+
+```javascript
+const cleanup = mountDevTools({ visible: true });
+
+// Later, when you want to remove DevTools
+cleanup();
+```
+
+### Multiple Instances
+
+While not recommended, you can mount multiple DevTools instances. Each will connect to the same store registry, so they'll show the same data.
+
+## Store Inspector Features
+
+### Real-Time Updates
+
+The Store Inspector automatically updates when store state changes. You don't need to refresh or manually update the view—changes appear instantly.
+
+### Search and Filter
+
+Use the search box in the sidebar to quickly find stores by name. This is especially useful when you have many stores in your application.
+
+### Store Selection
+
+Click on any store in the sidebar to inspect it. The main panel will update to show that store's state, getters, and actions.
+
+### State Tree Navigation
+
+Complex nested state is displayed as an expandable tree. Click through nested objects to explore your state structure.
+
+## Action Log Features
+
+### Action History
+
+The Action Log maintains a history of the last 50 actions. Each action includes:
+
+- **Time**: When the action was called
+- **Store**: Which store the action belongs to
+- **Action Name**: The name of the action that was called
+- **Payload**: The arguments passed to the action
+
+### Payload Inspection
+
+- **Truncated View**: Long payloads are truncated with an ellipsis
+- **Expand**: Click the expand button to see the full payload
+- **Copy**: Copy the payload JSON to your clipboard for debugging
+
+### Action Filtering
+
+While the Action Log doesn't currently support filtering, you can use the browser's find feature (Ctrl+F / Cmd+F) to search through actions.
+
+## Best Practices
+
+### Development Only
+
+Always ensure DevTools are only included in development builds. The automatic detection helps, but you can be extra safe with conditional imports:
+
+```javascript
+if (process.env.NODE_ENV === 'development') {
+  const { mountDevTools } = await import('@quantajs/devtools');
+  mountDevTools();
+}
+```
+
+### Store Naming
+
+Use descriptive store names to make it easier to identify stores in DevTools:
+
+```javascript
+// ✅ Good - descriptive names
+const userStore = createStore('user', { /* ... */ });
+const shoppingCartStore = createStore('shopping-cart', { /* ... */ });
+
+// ❌ Bad - unclear names
+const store1 = createStore('s1', { /* ... */ });
+const dataStore = createStore('data', { /* ... */ });
+```
+
+### Action Naming
+
+Use clear action names that describe what they do:
+
+```javascript
+// ✅ Good - clear action names
+actions: {
+  incrementCounter() { /* ... */ },
+  addItemToCart(item) { /* ... */ },
+  updateUserProfile(profile) { /* ... */ },
+}
+
+// ❌ Bad - unclear action names
+actions: {
+  do() { /* ... */ },
+  update() { /* ... */ },
+  change(data) { /* ... */ },
+}
+```
+
+### Debugging Workflow
+
+1. **Open DevTools** when you start development
+2. **Monitor Actions** to understand the flow of state changes
+3. **Inspect State** to verify that state updates are correct
+4. **Check Getters** to ensure computed values are working
+5. **Use Action Log** to trace back through state changes when debugging issues
+
+## Troubleshooting
+
+### DevTools Not Appearing
+
+If DevTools don't appear:
+
+1. **Check Environment**: Ensure you're in development mode
+2. **Check Mount**: Verify that `mountDevTools()` is being called
+3. **Check Console**: Look for error messages in the browser console
+4. **Check Stores**: Make sure you have at least one store created
+
+### Stores Not Showing
+
+If stores aren't appearing in DevTools:
+
+1. **Check Store Names**: Ensure stores have unique names
+2. **Check Creation**: Verify that stores are created before mounting DevTools
+3. **Check Bridge**: Ensure the DevTools bridge is properly connected
+
+### Actions Not Logging
+
+If actions aren't appearing in the Action Log:
+
+1. **Check Store Registration**: Ensure stores are properly registered
+2. **Check Action Calls**: Verify that actions are being called
+3. **Check Bridge**: Ensure the DevTools bridge is connected
+
+## Learn More
+
+- [API Reference](/docs/api/devtools) - Complete DevTools API documentation
+- [React Integration](/docs/integration/react-integration) - Using DevTools with React
+- [Managing Stores](/docs/guides/managing-stores) - Best practices for store management
+- [Persistence Guide](/docs/guides/persistence) - Understanding persistence with DevTools
+

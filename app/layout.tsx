@@ -6,6 +6,7 @@ import { Footer } from "@/components/footer";
 import Script from "next/script";
 import "@/styles/globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { QuantaDevToolWrapper } from "@/components/quanta-devtool-wrapper";
 
 const sansFont = Space_Grotesk({
   subsets: ["latin"],
@@ -208,6 +209,7 @@ export default function RootLayout({
           <Footer />
           <Toaster />
         </ThemeProvider>
+        <QuantaDevToolWrapper />
       </body>
     </html>
   );

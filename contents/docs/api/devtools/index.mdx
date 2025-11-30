@@ -1,0 +1,379 @@
+---
+title: DevTools API
+description: Complete API reference for QuantaJS DevTools.
+---
+
+# DevTools API
+
+Complete API reference for the `@quantajs/devtools` package.
+
+## Exports
+
+```typescript
+import { mountDevTools, DevTools } from '@quantajs/devtools';
+```
+
+- `mountDevTools`: Function to mount DevTools to your application
+- `DevTools`: Preact component for manual integration
+
+## mountDevTools
+
+Mounts the DevTools to your application. This is the recommended way to use DevTools.
+
+### Signature
+
+```typescript
+function mountDevTools(options?: DevToolsOptions): () => void;
+```
+
+### Parameters
+
+#### DevToolsOptions
+
+```typescript
+interface DevToolsOptions {
+  /**
+   * Whether to show the DevTools.
+   * If not provided, auto-detects development environment.
+   * Pass `true` to force show, `false` to force hide.
+   */
+  visible?: boolean;
+
+  /**
+   * Target element to mount into.
+   * Can be an HTMLElement or a CSS selector string.
+   * Defaults to 'body'.
+   */
+  target?: HTMLElement | string;
+}
+```
+
+### Returns
+
+A cleanup function that unmounts the DevTools when called.
+
+### Examples
+
+#### Basic Usage
+
+```javascript
+import { mountDevTools } from '@quantajs/devtools';
+
+// Auto-detects development environment
+mountDevTools();
+```
+
+#### Force Show
+
+```javascript
+import { mountDevTools } from '@quantajs/devtools';
+
+// Force show even in production
+mountDevTools({ visible: true });
+```
+
+#### Custom Target
+
+```javascript
+import { mountDevTools } from '@quantajs/devtools';
+
+// Mount to specific element
+const container = document.getElementById('devtools-container');
+mountDevTools({ target: container });
+
+// Or use a CSS selector
+mountDevTools({ target: '#devtools-container' });
+```
+
+#### With Cleanup
+
+```javascript
+import { mountDevTools } from '@quantajs/devtools';
+
+const cleanup = mountDevTools({ visible: true });
+
+// Later, unmount DevTools
+cleanup();
+```
+
+#### Conditional Mounting
+
+```javascript
+import { mountDevTools } from '@quantajs/devtools';
+
+// Only mount in development
+if (process.env.NODE_ENV === 'development') {
+  mountDevTools();
+}
+```
+
+#### Dynamic Import (Tree-Shaking)
+
+```javascript
+// Only load DevTools in development
+if (process.env.NODE_ENV === 'development') {
+  import('@quantajs/devtools').then(({ mountDevTools }) => {
+    mountDevTools();
+  });
+}
+```
+
+### Environment Detection
+
+The `mountDevTools` function automatically detects the development environment:
+
+1. **Vite**: Checks `import.meta.env.DEV`
+2. **Webpack/Node**: Checks `process.env.NODE_ENV === 'development'`
+
+If neither is detected and `visible` is not explicitly set, DevTools won't mount.
+
+### Behavior
+
+- **Shadow DOM**: DevTools are mounted in a Shadow DOM to prevent style conflicts
+- **Auto-Connect**: Automatically connects to the QuantaJS store registry via the bridge
+- **Store Detection**: Automatically detects all registered stores
+- **Real-Time Updates**: Updates in real-time as stores change
+
+## DevTools Component
+
+The `DevTools` component is a Preact component that can be manually integrated if needed.
+
+### Signature
+
+```typescript
+function DevTools(): JSX.Element;
+```
+
+### Usage
+
+```javascript
+import { render } from 'preact';
+import { DevTools } from '@quantajs/devtools';
+
+// Manual rendering
+render(<DevTools />, document.body);
+```
+
+### When to Use
+
+The `DevTools` component is typically only used for advanced use cases. For most applications, `mountDevTools()` is recommended because it:
+
+- Handles Shadow DOM setup
+- Manages styles injection
+- Provides automatic cleanup
+- Handles environment detection
+
+## DevTools Bridge
+
+DevTools communicate with QuantaJS stores through a global bridge object. This bridge is automatically set up by the core library when stores are created.
+
+### Bridge Interface
+
+```typescript
+interface DevToolsBridge {
+  subscribe(callback: (event: DevToolsEvent) => void): () => void;
+}
+
+interface DevToolsEvent {
+  type: 'STORE_INIT' | 'STATE_CHANGE' | 'ACTION_CALL';
+  payload: {
+    name?: string;
+    storeName?: string;
+    actionName?: string;
+    args?: any[];
+    store?: any;
+    // ... other properties
+  };
+}
+```
+
+### Event Types
+
+#### STORE_INIT
+
+Emitted when a new store is created:
+
+```typescript
+{
+  type: 'STORE_INIT',
+  payload: {
+    name: string;      // Store name
+    store: StoreInstance; // Store instance
+  }
+}
+```
+
+#### STATE_CHANGE
+
+Emitted when store state changes:
+
+```typescript
+{
+  type: 'STATE_CHANGE',
+  payload: {
+    storeName: string;
+    // ... change details
+  }
+}
+```
+
+#### ACTION_CALL
+
+Emitted when an action is called:
+
+```typescript
+{
+  type: 'ACTION_CALL',
+  payload: {
+    storeName: string;
+    actionName: string;
+    args: any[];
+  }
+}
+```
+
+### Manual Bridge Access
+
+You typically don't need to access the bridge directly, but it's available at:
+
+```javascript
+const bridge = window.__QUANTA_DEVTOOLS__;
+
+if (bridge) {
+  const unsubscribe = bridge.subscribe((event) => {
+    console.log('DevTools event:', event);
+  });
+
+  // Later, unsubscribe
+  unsubscribe();
+}
+```
+
+## React Integration
+
+For React applications, use the `QuantaDevTools` component from `@quantajs/react`:
+
+```tsx
+import { QuantaDevTools } from '@quantajs/react';
+
+function App() {
+  return (
+    <div>
+      <YourApp />
+      <QuantaDevTools />
+    </div>
+  );
+}
+```
+
+See the [React Integration Guide](/docs/integration/react-integration) for more details.
+
+## TypeScript Support
+
+Full TypeScript support is available:
+
+```typescript
+import { mountDevTools, DevToolsOptions } from '@quantajs/devtools';
+
+const options: DevToolsOptions = {
+  visible: true,
+  target: document.body,
+};
+
+const cleanup = mountDevTools(options);
+```
+
+## Error Handling
+
+### Target Element Not Found
+
+If the target element is not found, `mountDevTools` will:
+
+1. Log an error to the console
+2. Return a no-op cleanup function
+3. Not mount DevTools
+
+```javascript
+// This will log an error if #missing-element doesn't exist
+mountDevTools({ target: '#missing-element' });
+```
+
+### Bridge Not Available
+
+If the DevTools bridge is not available (stores not created yet), DevTools will:
+
+1. Retry connecting up to 10 times
+2. Log a warning if connection fails
+3. Still mount, but won't show any stores until the bridge is available
+
+## Performance Considerations
+
+### Bundle Size
+
+DevTools are designed to be lightweight:
+
+- **Tree-Shakable**: Use dynamic imports to exclude from production
+- **Conditional Loading**: Only load in development
+- **Shadow DOM**: Isolated styles don't affect your app
+
+### Runtime Performance
+
+- **Efficient Updates**: Only updates when stores actually change
+- **Limited History**: Action log keeps only the last 50 actions
+- **Lazy Rendering**: Components only render when visible
+
+## Best Practices
+
+### Development Only
+
+Always ensure DevTools are only included in development:
+
+```javascript
+if (process.env.NODE_ENV === 'development') {
+  const { mountDevTools } = await import('@quantajs/devtools');
+  mountDevTools();
+}
+```
+
+### Early Mounting
+
+Mount DevTools early in your application lifecycle, ideally right after creating your stores:
+
+```javascript
+import { createStore } from '@quantajs/core';
+import { mountDevTools } from '@quantajs/devtools';
+
+// Create stores
+const userStore = createStore('user', { /* ... */ });
+const todoStore = createStore('todos', { /* ... */ });
+
+// Mount DevTools
+mountDevTools();
+```
+
+### Cleanup in Tests
+
+If you're running tests, make sure to cleanup DevTools:
+
+```javascript
+describe('My App', () => {
+  let cleanup;
+
+  beforeEach(() => {
+    cleanup = mountDevTools({ visible: true });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  // ... tests
+});
+```
+
+## Learn More
+
+- [DevTools Guide](/docs/guides/devtools) - Complete guide to using DevTools
+- [React Integration](/docs/integration/react-integration) - Using DevTools with React
+- [Managing Stores](/docs/guides/managing-stores) - Store management best practices
+

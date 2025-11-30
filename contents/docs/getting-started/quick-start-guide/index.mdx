@@ -124,6 +124,34 @@ function CounterDisplayAlt() {
 }
 ```
 
+## Adding DevTools
+
+To debug your stores in development, add DevTools:
+
+```javascript
+import { mountDevTools } from '@quantajs/devtools';
+
+// Mount DevTools (auto-detects dev environment)
+mountDevTools();
+```
+
+Or in React:
+
+```javascript
+import { QuantaDevTools } from '@quantajs/react';
+
+function App() {
+  return (
+    <QuantaProvider stores={{ counter: counterStore }}>
+      <Counter />
+      <QuantaDevTools />
+    </QuantaProvider>
+  );
+}
+```
+
+DevTools provide real-time store inspection, action logging, and persistence management. See the [DevTools Guide](/docs/guides/devtools) for more information.
+
 ## Next Steps
 
 ### Explore more features:
@@ -131,4 +159,5 @@ function CounterDisplayAlt() {
 - [Reactive State](/docs/guides/reactive-state) - Understanding reactivity
 - [Computed Values](/docs/guides/computed-values) - Derived state
 - [Watching State](/docs/guides/watching-state) - Side effects
+- [DevTools Guide](/docs/guides/devtools) - Debugging with DevTools
 - [React Integration](/docs/integration/react-integration) - React-specific features

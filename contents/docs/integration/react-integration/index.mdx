@@ -378,6 +378,38 @@ function UserComponent() {
 }
 ```
 
+## DevTools Integration
+
+QuantaJS DevTools provide a powerful debugging interface for inspecting stores and monitoring state changes. In React applications, you can use the `QuantaDevTools` component:
+
+```tsx
+import { QuantaDevTools } from '@quantajs/react';
+
+function App() {
+  return (
+    <QuantaProvider stores={{ user: userStore, todos: todoStore }}>
+      <YourApp />
+      <QuantaDevTools />
+    </QuantaProvider>
+  );
+}
+```
+
+The `QuantaDevTools` component automatically:
+- Detects the development environment
+- Connects to all stores in your `QuantaProvider`
+- Provides real-time state inspection
+- Logs all actions with timestamps and payloads
+
+### DevTools Features
+
+- **Store Inspector**: View live state, getters, and actions for each store
+- **Action Log**: Track all state mutations with timestamps
+- **Persistence Management**: View and manage persistence status
+- **Search**: Quickly find stores by name
+
+For more information, see the [DevTools Guide](/docs/guides/devtools).
+
 ## Best Practices
 
 ### Store Organization
@@ -402,4 +434,5 @@ function UserComponent() {
 
 - [Core Concepts](/docs/guides/reactive-state) - Understanding reactivity
 - [Managing Stores](/docs/guides/managing-stores) - Store management patterns
+- [DevTools Guide](/docs/guides/devtools) - Debugging with DevTools
 - [API Reference](/docs/api/create-store) - Complete API documentation 

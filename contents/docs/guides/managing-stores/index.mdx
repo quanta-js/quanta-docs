@@ -625,10 +625,31 @@ const settingsStore = createStore('settings', {
 
 For more details on persistence, see the [Persistence Guide](/docs/guides/persistence).
 
+## Debugging with DevTools
+
+QuantaJS DevTools provide a powerful interface for inspecting and debugging your stores:
+
+- **Real-Time Inspection**: View store state, getters, and actions as they update
+- **Action Logging**: Track all state mutations with timestamps and payloads
+- **Persistence Management**: View persistence status and clear stored data
+- **Store Search**: Quickly find stores by name
+
+To use DevTools, simply mount them in your application:
+
+```javascript
+import { mountDevTools } from '@quantajs/devtools';
+
+// Auto-detects development environment
+mountDevTools();
+```
+
+For more information, see the [DevTools Guide](/docs/guides/devtools).
+
 ## Learn More
 
 - [Reactive State](/docs/guides/reactive-state) - Understanding reactivity
 - [Computed Values](/docs/guides/computed-values) - Derived state
 - [Persistence Guide](/docs/guides/persistence) - Using persistence for state saving
+- [DevTools Guide](/docs/guides/devtools) - Debugging with DevTools
 - [React Integration](/docs/integration/react-integration) - React applications
 - [API Reference](/docs/api/create-store) - Complete API documentation

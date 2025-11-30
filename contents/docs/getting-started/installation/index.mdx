@@ -40,6 +40,21 @@ pnpm add @quantajs/react @quantajs/core
 @quantajs/react depends on @quantajs/core, so both packages will be installed when you install the React package.
 </Callout>
 
+### @quantajs/devtools
+Developer tools for debugging and inspecting stores in real-time. Works with any framework.
+
+```bash
+npm install @quantajs/devtools @quantajs/core
+# or
+yarn add @quantajs/devtools @quantajs/core
+# or
+pnpm add @quantajs/devtools @quantajs/core
+```
+
+<Callout type="info">
+DevTools are designed for development only. They automatically detect your development environment and won't mount in production builds.
+</Callout>
+
 ## Usage Examples
 
 ### Core Package
@@ -84,8 +99,37 @@ function App() {
 }
 ```
 
+## DevTools Setup
+
+To enable DevTools for debugging, install and mount them:
+
+```javascript
+import { mountDevTools } from '@quantajs/devtools';
+
+// Auto-detects development environment
+mountDevTools();
+```
+
+For React applications, you can use the `QuantaDevTools` component:
+
+```javascript
+import { QuantaDevTools } from '@quantajs/react';
+
+function App() {
+  return (
+    <QuantaProvider stores={{ counter: counterStore }}>
+      <YourApp />
+      <QuantaDevTools />
+    </QuantaProvider>
+  );
+}
+```
+
+See the [DevTools Guide](/docs/guides/devtools) for more information.
+
 ## Next Steps
 
 - [Quick Start Guide](/docs/getting-started/quick-start-guide) - Learn the basics
 - [Core Concepts](/docs/guides/reactive-state) - Understand reactive state
+- [DevTools Guide](/docs/guides/devtools) - Debugging with DevTools
 - [React Integration](/docs/integration/react-integration) - Build React applications

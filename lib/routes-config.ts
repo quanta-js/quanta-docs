@@ -37,6 +37,7 @@ export const ROUTES: EachRoute[] = [
                 href: "/handling-side-effects",
                 tag: "Beta",
             },
+            { title: "DevTools", href: "/devtools", tag: "New!" },
         ],
     },
     {
@@ -69,6 +70,7 @@ export const ROUTES: EachRoute[] = [
             { title: "watch", href: "/watch" },
             { title: "Persistence", href: "/persistence", tag: "New!" },
             { title: "Logger", href: "/logger" },
+            { title: "DevTools", href: "/devtools", tag: "New!" },
         ],
     },
     {
