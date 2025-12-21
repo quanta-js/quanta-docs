@@ -1,93 +1,18 @@
-import { buttonVariants } from "@/components/ui/button";
-import CommandCopy from "@/components/ui/CommandCopy";
-import { Cover } from "@/components/ui/cover";
-import { page_routes } from "@/lib/routes-config";
-import { MoveUpRightIcon } from "lucide-react";
-import Link from "next/link";
 import { Metadata } from "next";
+import Overlay from "@/components/landing/Overlay";
+
+import SceneWrapper from "@/components/landing/SceneWrapper";
 
 export const metadata: Metadata = {
-  title: "QuantaJS - Modern State Management for JavaScript",
-  description: "QuantaJS is a compact, scalable, and developer-friendly state management library for JavaScript and TypeScript. Features reactive state, computed values, persistence, and seamless React integration. Perfect for modern web applications.",
-  keywords: [
-    "QuantaJS",
-    "state management",
-    "javascript state management",
-    "typescript state management",
-    "react state management",
-    "reactive programming",
-    "computed values",
-    "state persistence",
-    "lightweight state management",
-    "framework agnostic",
-  ],
-  alternates: {
-    canonical: "https://quantajs.com/",
-  },
-  openGraph: {
-    title: "QuantaJS - Modern State Management for JavaScript",
-    description: "A compact, scalable, and developer-friendly state management library for JavaScript and TypeScript with reactive state and seamless React integration.",
-    url: "https://quantajs.com/",
-    type: "website",
-    siteName: "QuantaJS",
-    images: [
-      {
-        url: "https://quantajs.com/img/quantajs_banner.png",
-        width: 1200,
-        height: 630,
-        alt: "QuantaJS - Modern State Management Library for JavaScript",
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "QuantaJS - Modern State Management for JavaScript",
-    description: "A compact, scalable, and developer-friendly state management library for JavaScript and TypeScript.",
-    images: ["https://quantajs.com/img/quantajs_banner.png"],
-  },
+  title: "QuantaJS - Modern State Management",
+  description: "The State of the Art in JavaScript State Management.",
 };
 
 export default function Home() {
-
   return (
-    <div className="flex sm:min-h-[85.5vh] min-h-[82vh] flex-col sm:items-center justify-center text-center px-2 sm:py-8 py-12">
-      <Link
-        href="https://github.com/quanta-js"
-        target="_blank"
-        className="mb-5 sm:text-lg flex items-center gap-2 underline underline-offset-4 sm:-mt-12"
-      >
-        Follow along on GitHub{" "}
-        <MoveUpRightIcon className="w-4 h-4 font-extrabold" />
-      </Link>
-      <h1 className="text-[2.4rem] leading-10 sm:leading-[4.5rem] font-jura-bold mb-4 sm:text-6xl text-left sm:text-center">
-        Effortlessly manage state in any JavaScript project with
-        <Cover className="mx-2">
-          <span className="text-qteal font-jura-bold">QuantaJS</span>
-        </Cover>
-        and its powerful reactivity system.
-      </h1>
-      <p className="mb-8 sm:text-lg max-w-[800px] text-muted-foreground font-jura-light text-left sm:text-center text-qgray">
-        This lightweight, scalable state management library, built for modern JavaScript environments, offers an intuitive API and flexible reactivity, perfect for projects of any size currently in beta and evolving fast!
-      </p>
-      <div className="sm:flex sm:flex-row grid grid-cols-2 items-center sm;gap-5 gap-3 mb-8">
-        <Link
-          href={`/docs${page_routes[2].href}`}
-          className={buttonVariants({ className: "px-6", size: "lg" })}
-        >
-          Quick Start
-        </Link>
-        <Link
-          href={`/docs${page_routes[0].href}`}
-          className={buttonVariants({
-            variant: "secondary",
-            className: "px-6",
-            size: "lg",
-          })}
-        >
-          Introduction
-        </Link>
-      </div>
-      <CommandCopy />
-    </div>
+    <main className="relative w-full">
+      <SceneWrapper />
+      <Overlay />
+    </main>
   );
 }
