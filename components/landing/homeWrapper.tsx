@@ -1,10 +1,19 @@
 'use client';
 
-import { useLayoutEffect } from "react";
+import { useLayoutEffect, useRef, useEffect } from "react";
+import { useTheme } from "next-themes";
 import Overlay from "./Overlay";
 import SceneWrapper from "./SceneWrapper";
 
 export default function HomeWrapper() {
+    const { resolvedTheme } = useTheme();
+    const themeRef = useRef(resolvedTheme);
+
+    // Keep ref updated with latest theme
+    useEffect(() => {
+        themeRef.current = resolvedTheme;
+    }, [resolvedTheme]);
+
     // make dark theme by default irrespective user selected preference only for home page
     useLayoutEffect(() => {
         // Force dark mode class for Tailwind tokens
@@ -16,8 +25,12 @@ export default function HomeWrapper() {
         document.body.style.backgroundColor = "#000000"; // Hard black
 
         return () => {
-            // Cleanup: Remove forced dark mode and restore body background
-            document.documentElement.classList.remove("dark");
+            // Cleanup: Only remove forced dark mode if the user's PREFERRED theme is NOT dark.
+            // If they are in dark mode (or switched to it), we should leave the class alone.
+            if (themeRef.current !== 'dark') {
+                document.documentElement.classList.remove("dark");
+            }
+            // Restore body background
             document.body.style.backgroundColor = originalBodyBg;
         };
     }, []);
