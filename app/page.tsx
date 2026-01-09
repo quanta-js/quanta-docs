@@ -1,7 +1,5 @@
 import { Metadata } from "next";
-import Overlay from "@/components/landing/Overlay";
-
-import SceneWrapper from "@/components/landing/SceneWrapper";
+import HomeWrapper from "@/components/landing/homeWrapper";
 
 export const metadata: Metadata = {
   title: "QuantaJS - Modern State Management",
@@ -10,9 +8,6 @@ export const metadata: Metadata = {
 
 export default function Home() {
   return (
-    <main className="relative w-full">
-      <SceneWrapper />
-      <Overlay />
-    </main>
+    <HomeWrapper />
   );
 }

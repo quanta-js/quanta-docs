@@ -8,19 +8,30 @@ import { useTheme } from "next-themes";
 
 import { useEffect, useState } from "react";
 
+import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
+
 export function Footer() {
   const { resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
+  const pathname = usePathname();
+  const isHome = pathname === "/";
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
   return (
-    <footer className="border-t w-full h-16">
+    <footer className={cn(
+      "border-t w-full h-16",
+      isHome && "dark border-white/10"
+    )}>
       <div className="container flex items-center sm:justify-between justify-center sm:gap-0 gap-4 h-full text-muted-foreground text-sm flex-wrap sm:py-0 py-3 max-sm:px-4">
         <div className="flex items-center gap-3 font-jura-regular">
-          <Image className="rounded-md" width={42} height={42} src={!mounted ? "/img/q_logo_light.svg" : (resolvedTheme == 'dark' ? "/img/q_logo_dark.svg" : "/img/q_logo_light.svg")} alt="QuantaJS logo for JavaScript library" />
+          <div className="relative w-[42px] h-[42px]">
+            <Image className="rounded-md dark:hidden" fill src="/img/q_logo_light.svg" alt="QuantaJS logo" />
+            <Image className="rounded-md hidden dark:block" fill src="/img/q_logo_dark.svg" alt="QuantaJS logo" />
+          </div>
           <p>
             Crafted with passion by the QuantaJS crew. Unleash the source magic on <a href="https://github.com/quanta-js/quanta">GitHub</a>, your star fuels the journey!
           </p>

@@ -144,16 +144,18 @@ function CameraController() {
     return null;
 }
 
-export default function Scene() {
+export default function Scene({ isDark = true }: { isDark?: boolean }) {
     return (
-        <div className="fixed inset-0 z-[-1]">
+        <div className="fixed inset-0 z-[-1] bg-black">
             <Canvas gl={{ antialias: true }} dpr={[1, 2]}>
-                <ambientLight intensity={1} />
-                <directionalLight position={[10, 10, 5]} intensity={2} />
+                <ambientLight intensity={isDark ? 1 : 1.5} />
+                <directionalLight position={[10, 10, 5]} intensity={isDark ? 2 : 3} />
                 <pointLight position={[-10, -10, -5]} intensity={1} color="#00cea8" />
                 <Nucleus />
                 <Particles />
-                <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
+                {isDark && (
+                    <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
+                )}
                 <CameraController />
             </Canvas>
         </div>

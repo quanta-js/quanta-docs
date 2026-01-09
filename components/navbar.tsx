@@ -33,9 +33,18 @@ const algolia_props = {
   apiKey: process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY ?? "",
 };
 
+import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
+
 export function Navbar() {
+  const pathname = usePathname();
+  const isHome = pathname === "/";
+
   return (
-    <nav className="w-full border-b h-16 sticky top-0 z-50 bg-background backdrop-blur-sm bg-opacity-60">
+    <nav className={cn(
+      "w-full border-b h-16 sticky top-0 z-50 bg-background backdrop-blur-sm bg-opacity-60",
+      isHome && "dark border-white/10 text-foreground" // Force dark mode, visible border, and re-apply text color
+    )}>
       <div className="sm:container mx-auto w-[95vw] h-full flex items-center sm:justify-between md:gap-2">
         <div className="flex items-center sm:gap-5 gap-2.5">
           <SheetLeftbar />
@@ -72,7 +81,7 @@ export function Navbar() {
                 })}
                 area-label="NPM"
               >
-                <svg  className="h-[1.1rem] w-[1.1rem] grayscale" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2500 2500" width="2500" height="2500"><path d="M0 0h2500v2500H0z" fill="#c00" /><path d="M1241.5 268.5h-973v1962.9h972.9V763.5h495v1467.9h495V268.5z" fill="#fff" /></svg>
+                <svg className="h-[1.1rem] w-[1.1rem] grayscale" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2500 2500" width="2500" height="2500"><path d="M0 0h2500v2500H0z" fill="#c00" /><path d="M1241.5 268.5h-973v1962.9h972.9V763.5h495v1467.9h495V268.5z" fill="#fff" /></svg>
               </Link>
               <ModeToggle />
             </div>
