@@ -23,7 +23,7 @@ function watch<T>(
 - `source`: A function that returns the value to watch. This function is automatically tracked for dependencies.
 - `callback`: A function that executes when the watched value changes. Receives the new value and optionally the old value as parameters.
 - `options` (optional): Configuration options:
-  - `deep`: Whether to perform deep watching (defaults to `false`). When `true`, uses polling to detect nested changes.
+  - `deep`: Whether to perform deep watching (defaults to `false`). When `true`, recursively tracks all nested properties for changes.
   - `immediate`: Whether to invoke the callback immediately upon setup (defaults to `true`).
 
 ## Returns
@@ -388,7 +388,7 @@ watch(() => state.count, (value) => {
 
 ### Deep Watching
 
-For deep watching of nested objects, use the `deep` option. This uses polling to detect changes:
+For deep watching of nested objects, use the `deep` option. This recursively tracks all nested properties using reactive dependency tracking:
 
 ```javascript
 const state = reactive({
@@ -405,7 +405,7 @@ watch(() => state.user, (user) => {
   console.log('User object reference changed');
 });
 
-// Deep watch - detects nested property changes via polling
+// Deep watch - detects nested property changes reactively
 const unwatch = watch(() => state.user, (user) => {
   console.log('User or nested properties changed');
 }, { deep: true });
@@ -417,7 +417,7 @@ state.user.profile.name = 'Jane'; // Triggers deep watch
 unwatch();
 ```
 
-**Note:** Deep watching uses polling (every 100ms by default) and may have performance implications for large objects. Prefer shallow watching when possible.
+**Note:** Deep watching recursively accesses all nested properties to register reactive dependencies. For very large or deeply nested objects, prefer watching specific properties for better performance.
 
 ## Cleanup
 

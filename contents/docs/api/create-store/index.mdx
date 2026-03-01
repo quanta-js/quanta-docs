@@ -254,7 +254,23 @@ function Component() {
 - **Duplicate Store Names**: Throws an error if a store with the same name already exists
 - **Invalid State**: State must be a function that returns an object
 - **Action Context**: Actions must use `this` to access store properties
+- **Name Collisions**: Throws if an action name conflicts with a state property or getter name. Getters that shadow state properties are allowed (the getter takes priority on the flattened store)
 - **Destroyed Store**: Using a store after `$destroy()` may result in errors
+
+## Batch Effects
+
+When making multiple state changes that should be treated as a single update, use `batchEffects`:
+
+```javascript
+import { batchEffects } from '@quantajs/core';
+
+batchEffects(() => {
+  store.count = 10;
+  store.name = 'Updated';
+  store.items.push(newItem);
+});
+// Effects run only once after the batch completes
+```
 
 ## Learn More
 

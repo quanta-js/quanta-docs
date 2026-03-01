@@ -181,7 +181,7 @@ watch(() => ({
   console.log('Theme settings changed:', newSettings);
 });
 
-// Watch entire nested objects
+// Watch entire nested objects (deep tracking)
 watch(() => settings.notifications, (newNotifications) => {
   console.log('Notification settings updated:', newNotifications);
 }, { deep: true });

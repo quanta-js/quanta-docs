@@ -73,8 +73,9 @@ class SessionStorageAdapter implements PersistenceAdapter {
 
 **Features:**
 - Data persists only for the current browser session
-- Cross-tab synchronization
 - Useful for temporary state that shouldn't persist across sessions
+
+> **Note:** Unlike `LocalStorageAdapter`, `SessionStorageAdapter` does not support cross-tab synchronization because `storage` events do not fire for `sessionStorage` changes within the same tab.
 
 ### `IndexedDBAdapter`
 
@@ -303,7 +304,7 @@ const store = createStore('validated', {
 
 ## Cross-tab Synchronization
 
-All storage adapters support cross-tab synchronization automatically. When data changes in one tab, other tabs are automatically updated:
+The `LocalStorageAdapter` supports cross-tab synchronization automatically via `storage` events. When data changes in one tab, other tabs are automatically updated:
 
 ```javascript
 // Tab 1
@@ -312,6 +313,8 @@ store.name = 'John';
 // Tab 2 automatically receives the update
 console.log(store.name); // 'John'
 ```
+
+> **Note:** Cross-tab sync is only available with `LocalStorageAdapter`. `SessionStorageAdapter` does not support cross-tab sync, and `IndexedDBAdapter` does not have a built-in change notification mechanism.
 
 ## Error Handling
 

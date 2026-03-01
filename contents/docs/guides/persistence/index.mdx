@@ -386,7 +386,7 @@ if (store.$persist && store.$persist.isRehydrated()) {
 
 ### Automatic Synchronization
 
-All storage adapters automatically synchronize data across browser tabs:
+The `LocalStorageAdapter` automatically synchronizes data across browser tabs via `storage` events:
 
 ```javascript
 const store = createStore('sync', {
@@ -402,6 +402,8 @@ store.theme = 'dark';
 // Tab 2 automatically receives the update
 console.log(store.theme); // 'dark'
 ```
+
+> **Note:** Cross-tab synchronization is only supported with `LocalStorageAdapter`. `SessionStorageAdapter` does not support it because `storage` events do not fire for same-tab `sessionStorage` changes. `IndexedDBAdapter` does not have a built-in change notification mechanism.
 
 ### Manual Synchronization
 
