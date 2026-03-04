@@ -534,19 +534,17 @@ export default function LoginForm() {
 
 ### 4. Persistence
 
-For data that needs to persist across sessions:
+For data that needs to persist across sessions, use QuantaJS's built-in persistence:
 
 ```javascript
 // stores/cartStore.js
+import { createStore, LocalStorageAdapter } from '@quantajs/core';
+
 export const cartStore = createStore('cart', {
-  state: () => {
-    // Load from localStorage on initialization
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('cart');
-      return saved ? JSON.parse(saved) : { items: [], isOpen: false };
-    }
-    return { items: [], isOpen: false };
-  },
+  state: () => ({
+    items: [],
+    isOpen: false,
+  }),
   actions: {
     addItem(product) {
       const existingItem = this.items.find(item => item.id === product.id);
@@ -555,13 +553,17 @@ export const cartStore = createStore('cart', {
       } else {
         this.items.push({ ...product, quantity: 1 });
       }
-      // Save to localStorage
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('cart', JSON.stringify(this));
-      }
+    },
+    removeItem(productId) {
+      this.items = this.items.filter(item => item.id !== productId);
     },
   },
+  persist: {
+    adapter: new LocalStorageAdapter('cart-store'),
+    debounceMs: 300,
+  },
 });
+// State is automatically saved and restored — no manual localStorage code needed!
 ```
 
 ## Common Patterns
@@ -653,8 +655,8 @@ if (typeof window !== 'undefined') {
 // Enable store debugging in development
 if (process.env.NODE_ENV === 'development') {
   // Log store changes
-  userStore.$subscribe((mutation, state) => {
-    console.log('User store changed:', mutation, state);
+  userStore.subscribe(() => {
+    console.log('User store changed:', userStore.state);
   });
 }
 ```
