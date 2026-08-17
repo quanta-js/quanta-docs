@@ -4,6 +4,14 @@ description: API reference for the watch function.
 ---
 
 # Watch
+
+<Note title="These examples use `createStore`">
+`createStore` builds a store instance immediately and is still fully supported.
+In application code prefer [`defineStore`](/docs/api/define-store), which
+returns an accessor you call — it is safe at module scope on a server and needs
+no container passed around. Everything on this page applies to both.
+</Note>
+
 ## `watch`
 
 Watches for changes in reactive state and executes a callback when changes occur.

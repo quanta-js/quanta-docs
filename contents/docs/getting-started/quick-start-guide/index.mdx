@@ -5,14 +5,22 @@ description: Build your first QuantaJS store with core, React, and DevTools in a
 
 # Quick Start
 
-This guide gets you from install to a working app with `@quantajs/core`, `@quantajs/react`, and optional `@quantajs/devtools`.
+This guide gets you from install to a working app with `@quantajs/core`,
+`@quantajs/react`, and optional `@quantajs/devtools`.
 
-## 1. Core Store
+Coming from 2.0.0? See [Migrating to 2.1](/docs/getting-started/migration).
+
+## 1. Define a store
+
+`defineStore` returns a **definition** — a blueprint you call to get the
+instance. It holds no state itself, which is what makes it safe at module scope
+even on a server.
 
 ```ts
-import { createStore } from '@quantajs/core';
+// stores/counter.ts
+import { defineStore } from '@quantajs/core';
 
-export const counterStore = createStore('counter', {
+export const useCounterStore = defineStore('counter', {
   state: () => ({ count: 0 }),
   getters: {
     doubled: (s) => s.count * 2,
@@ -28,14 +36,24 @@ export const counterStore = createStore('counter', {
 });
 ```
 
-## 2. React Integration
+Everything is inferred — you never restate a generic:
+
+```ts
+const counter = useCounterStore();
+
+counter.count;       // number
+counter.doubled;     // number
+counter.increment(); // typed
+```
+
+## 2. Use it in React
 
 ```tsx
-import { QuantaProvider, useStore } from '@quantajs/react';
-import { counterStore } from './counter-store';
+import { useQuanta } from '@quantajs/react';
+import { useCounterStore } from './stores/counter';
 
 function Counter() {
-  const counter = useStore('counter');
+  const counter = useQuanta(useCounterStore);
 
   return (
     <div>
@@ -48,34 +66,115 @@ function Counter() {
 }
 
 export default function App() {
+  return <Counter />;
+}
+```
+
+No provider is required in a client-only app — stores resolve against an
+ambient container. Add one when you need to control the container's lifetime,
+which is mostly [under SSR](/docs/guides/ssr):
+
+```tsx
+import { QuantaProvider } from '@quantajs/react';
+
+<QuantaProvider>
+  <Counter />
+</QuantaProvider>
+```
+
+## 3. Subscribe to less
+
+`useQuanta` subscribes to the whole store. In a view that renders a lot, use a
+selector instead — it subscribes to exactly what the selector *reads*, so a
+component reading `s.count` is not woken by a write to `s.name`.
+
+```tsx
+import { useQuantaValue, useQuantaActions } from '@quantajs/react';
+
+/** Re-renders only when `count` changes. */
+function CountLabel() {
+  const count = useQuantaValue(useCounterStore, (s) => s.count);
+  return <p>{count}</p>;
+}
+
+/** Never re-renders — it calls an action but reads no state. */
+function IncrementButton() {
+  const counter = useQuantaActions(useCounterStore);
+  return <button onClick={() => counter.increment()}>+</button>;
+}
+```
+
+## 4. Async, without the boilerplate
+
+Every action carries `pending`, `error` and `abort()`. You do not write loading
+flags by hand.
+
+```ts
+export const useUsersStore = defineStore('users', {
+  state: () => ({ list: [] as User[] }),
+  actions: {
+    async load() {
+      const res = await fetch('/api/users', { signal: this.$signal });
+      this.list = await res.json();
+    },
+  },
+});
+```
+
+```tsx
+function Users() {
+  const users = useQuanta(useUsersStore);
+
   return (
-    <QuantaProvider stores={{ counter: counterStore }}>
-      <Counter />
-    </QuantaProvider>
+    <>
+      <button onClick={() => users.load().catch(() => {})} disabled={users.load.pending}>
+        {users.load.pending ? 'Loading…' : 'Load users'}
+      </button>
+      {users.load.error && <p role="alert">{users.load.error.message}</p>}
+      <ul>{users.list.map((u) => <li key={u.id}>{u.name}</li>)}</ul>
+    </>
   );
 }
 ```
 
-## 3. Selector-Based Rendering
+See [Async Actions](/docs/guides/async-actions).
 
-Use selectors when components only need a slice of store data.
+## 5. Persist state (optional)
 
-```tsx
-import { useStoreSelector, useQuantaSelector } from '@quantajs/react';
-import { counterStore } from './counter-store';
+```ts
+import { defineStore, LocalStorageAdapter } from '@quantajs/core';
 
-function CounterCountFromContext() {
-  const count = useStoreSelector('counter', (s) => s.count);
-  return <p>{count}</p>;
-}
+export const useSettingsStore = defineStore('settings', {
+  state: () => ({ theme: 'light', language: 'en' }),
+  actions: {
+    toggleTheme() {
+      this.theme = this.theme === 'light' ? 'dark' : 'light';
+    },
+  },
+  persist: {
+    adapter: new LocalStorageAdapter('settings'),
+    debounceMs: 300,
+  },
+});
 
-function CounterCountFromReference() {
-  const count = useQuantaSelector(counterStore, (s) => s.count);
-  return <p>{count}</p>;
-}
+// Wait for restored state if you need it before rendering.
+await useSettingsStore().$hydrated;
 ```
 
-## 4. DevTools (Optional)
+See [Persistence](/docs/guides/persistence).
+
+## 6. DevTools (optional)
+
+DevTools is **opt-in** as of 2.1 — it never attaches to `window` until you ask
+it to.
+
+```ts
+import { enableDevTools } from '@quantajs/core';
+
+if (import.meta.env.DEV) {
+  enableDevTools();
+}
+```
 
 ```ts
 import { mountDevTools } from '@quantajs/devtools';
@@ -83,12 +182,29 @@ import { mountDevTools } from '@quantajs/devtools';
 mountDevTools();
 ```
 
-For React apps, you can also render `QuantaDevTools` from `@quantajs/react`.
+For React apps you can render `<QuantaDevTools />` from `@quantajs/react`
+instead of calling `mountDevTools` yourself.
+
+## Without React
+
+`@quantajs/core` has no framework dependency. The same store works from plain
+JavaScript:
+
+```ts
+const counter = useCounterStore();
+
+const unsubscribe = counter.subscribe(() => {
+  document.querySelector('#count')!.textContent = String(counter.count);
+});
+
+counter.increment();
+```
 
 ## What to Learn Next
 
-- [Reactive State](/docs/guides/reactive-state)
-- [Managing Stores](/docs/guides/managing-stores)
-- [Persistence](/docs/guides/persistence)
+- [defineStore API](/docs/api/define-store)
+- [Async Actions](/docs/guides/async-actions)
+- [Containers](/docs/api/containers)
+- [Server-Side Rendering](/docs/guides/ssr)
 - [React Integration](/docs/integration/react-integration)
-- [DevTools Guide](/docs/guides/devtools)
+- [Persistence](/docs/guides/persistence)

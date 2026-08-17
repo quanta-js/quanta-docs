@@ -5,6 +5,14 @@ description: API reference for the logger service in QuantaJS.
 
 # Logger
 
+<Note title="These examples use `createStore`">
+`createStore` builds a store instance immediately and is still fully supported.
+In application code prefer [`defineStore`](/docs/api/define-store), which
+returns an accessor you call — it is safe at module scope on a server and needs
+no container passed around. Everything on this page applies to both.
+</Note>
+
+
 QuantaJS includes a comprehensive logging service that works across all JavaScript environments (Node.js, browser, and web workers). The logger provides configurable log levels, timestamps, prefixes, and color support.
 
 ## Overview

@@ -7,19 +7,34 @@ description: Learn how to use QuantaJS DevTools to inspect stores, monitor state
 
 QuantaJS DevTools provides a powerful visual debugging interface for inspecting stores, monitoring state changes, and tracking actions in real-time. Whether you're building a small prototype or a large-scale application, DevTools helps you understand and debug your state management with ease.
 
-<Callout type="info">
-DevTools automatically detects your development environment and won't mount in production builds, keeping your bundle size minimal.
-</Callout>
+<Note type="warning" title="DevTools is opt-in as of 2.1">
+Nothing is collected and nothing is attached to `window` until you call
+`enableDevTools()`. This is a **security** change, not an ergonomic one — see
+[Why it is opt-in](#why-it-is-opt-in).
+</Note>
 
 ## Features
 
 ✅ **Real-time Store Inspector** – View live state, getters, and actions  
 ✅ **Action Log** – Track all state mutations with timestamps and payloads  
-✅ **Auto-Detection** – Automatically detects development environment  
+✅ **Opt-In** – Collects nothing until explicitly enabled  
+✅ **Redaction** – Mask sensitive state paths and action arguments  
 ✅ **Framework Agnostic** – Works with vanilla JS, React, or any framework  
-✅ **Modern UI** – Built with Preact and a lightweight vanilla CSS design system  
-✅ **Lightweight** – Minimal bundle size with tree-shaking support  
+✅ **Modern UI** – Built with Preact and Shadow DOM, so it cannot leak styles into your app  
+✅ **Out of Your Bundle** – An optional peer dependency behind a dynamic import  
 ✅ **Persistence Management** – View and manage persistence status for stores
+
+## Two pieces
+
+DevTools is split in two, and you need both:
+
+| Piece | From | Does |
+|---|---|---|
+| The **bridge** | `enableDevTools()` in `@quantajs/core` | Collects store state and action calls. **Off by default.** |
+| The **UI** | `mountDevTools()` in `@quantajs/devtools`, or `<QuantaDevTools />` in `@quantajs/react` | Renders the panel. |
+
+Mount the UI without enabling the bridge and the panel appears empty — that is
+the symptom to recognise.
 
 ## Installation
 
@@ -35,16 +50,10 @@ pnpm add @quantajs/devtools @quantajs/core
 
 ## Quick Start
 
-### Automatic Mounting (Recommended)
-
-The DevTools automatically detect your development environment and mount themselves:
-
 ```javascript
-import { createStore } from '@quantajs/core';
-import { mountDevTools } from '@quantajs/devtools';
+import { defineStore, enableDevTools } from '@quantajs/core';
 
-// Create your stores
-const counterStore = createStore('counter', {
+export const useCounterStore = defineStore('counter', {
   state: () => ({ count: 0 }),
   actions: {
     increment() {
@@ -53,28 +62,68 @@ const counterStore = createStore('counter', {
   },
 });
 
-// Mount DevTools (auto-detects dev environment)
+// 1. Turn on the bridge — only in development.
+if (process.env.NODE_ENV === 'development') {
+  enableDevTools();
+}
+```
+
+```javascript
+// 2. Mount the UI.
+import { mountDevTools } from '@quantajs/devtools';
+
 mountDevTools();
 ```
 
-That's it! The DevTools will appear as a floating button in the bottom-right corner of your application. Click it to open the full DevTools interface.
+A floating button appears in the bottom-right corner. Click it to open the
+panel.
 
-### Manual Mounting with Options
+Enable the bridge as early as possible — ideally at your app's entry point,
+before any store is created. It picks up stores created afterwards; stores
+created before it is enabled may not be registered.
 
-For more control, you can specify options when mounting:
+### Redacting sensitive values
+
+DevTools observes *everything*: full store contents and every argument passed
+to every action. When that includes tokens or personal data, redact it:
+
+```javascript
+enableDevTools({
+  redact: ['token', 'user.ssn', 'payment.cardNumber'],
+});
+```
+
+Paths are matched against state values and against action arguments that are
+objects carrying a matching key. Matches are replaced with `[redacted]`.
+
+### Turning it back off
+
+```javascript
+import { disableDevTools } from '@quantajs/core';
+
+disableDevTools();
+```
+
+### Mounting options
 
 ```javascript
 import { mountDevTools } from '@quantajs/devtools';
 
-// Force show DevTools (even in production)
+// Force the panel visible regardless of environment detection
 mountDevTools({ visible: true });
 
-// Mount to custom element
+// Mount into a specific element
 mountDevTools({
-  visible: true,
   target: document.getElementById('devtools-container'),
 });
 ```
+
+<Note>
+`mountDevTools({ visible })` controls only whether the **panel renders**. It has
+no effect on data collection — that is `enableDevTools()`, and its default is
+off. The two functions take different option objects that happen to share a
+type name.
+</Note>
 
 ## Using DevTools
 
@@ -127,8 +176,11 @@ The action log keeps track of the last 100 actions, giving you a comprehensive v
 If you're using React, you can use the `QuantaDevTools` component from `@quantajs/react`:
 
 ```tsx
-import React from 'react';
-import { QuantaDevTools } from '@quantajs/react';
+import { QuantaDevTools, enableDevTools } from '@quantajs/react';
+
+if (process.env.NODE_ENV === 'development') {
+  enableDevTools();
+}
 
 function App() {
   return (
@@ -140,30 +192,48 @@ function App() {
 }
 ```
 
-The React component automatically handles mounting and unmounting, and integrates seamlessly with your React application.
+The component handles mounting and unmounting for you. `@quantajs/devtools` is
+an optional peer dependency loaded through a dynamic import, so it stays out of
+your production bundle — which is why `@quantajs/react` is 2.8 kB gzipped
+rather than the 20.1 kB it was in 2.0.0.
+
+In the Next.js App Router, put this in a file marked `'use client'`.
 
 ## Development vs Production
 
-### Automatic Environment Detection
+### Why it is opt-in
 
-DevTools automatically detect your development environment:
+Before 2.1, the DevTools bridge enabled itself whenever
+`process.env.NODE_ENV` was not statically replaced at build time, and attached
+itself to `window` at import time. That check holds under Vite, webpack and
+Next.js — and fails everywhere else: a CDN bundle, Deno, a plain
+`<script type="module">`. In those environments the bridge stayed on **in
+production**, exposing every store's full contents and every action argument
+(credentials, tokens, personal data) to any script running on the page.
 
-- **Vite**: Detects `import.meta.env.DEV`
-- **Webpack/Node**: Detects `process.env.NODE_ENV === 'development'`
+Environment detection was the wrong mechanism for a security boundary. As of
+2.1 the bridge attaches only after an explicit `enableDevTools()` call, so
+there is no environment in which it turns itself on.
 
-If neither is detected, DevTools won't mount by default.
-
-### Manual Control
-
-You can manually control DevTools visibility:
+### Keeping it out of production
 
 ```javascript
-// Force show in any environment
-mountDevTools({ visible: true });
-
-// Force hide even in development
-mountDevTools({ visible: false });
+if (process.env.NODE_ENV === 'development') {
+  enableDevTools();
+}
 ```
+
+```javascript
+// Vite
+if (import.meta.env.DEV) {
+  enableDevTools();
+}
+```
+
+The UI's own visibility check still auto-detects, so `mountDevTools()` with no
+options will not render the panel in a production build. Treat that as a
+convenience, not a guarantee — the guard that matters is the one around
+`enableDevTools()`.
 
 ### Tree-Shaking
 
@@ -256,13 +326,24 @@ While the Action Log doesn't currently support filtering, you can use the browse
 
 ### Development Only
 
-Always ensure DevTools are only included in development builds. The automatic detection helps, but you can be extra safe with conditional imports:
+Guard `enableDevTools()`, and load the UI through a dynamic import so it never
+enters your production bundle:
 
 ```javascript
 if (process.env.NODE_ENV === 'development') {
+  enableDevTools();
   const { mountDevTools } = await import('@quantajs/devtools');
   mountDevTools();
 }
+```
+
+### Redact Before You Need To
+
+Add `redact` entries when you add the field, not after a screenshot has already
+gone into a bug report:
+
+```javascript
+enableDevTools({ redact: ['token', 'refreshToken', 'user.email'] });
 ```
 
 ### Store Naming
@@ -271,12 +352,12 @@ Use descriptive store names to make it easier to identify stores in DevTools:
 
 ```javascript
 // ✅ Good - descriptive names
-const userStore = createStore('user', { /* ... */ });
-const shoppingCartStore = createStore('shopping-cart', { /* ... */ });
+const useUserStore = defineStore('user', { /* ... */ });
+const useCartStore = defineStore('shopping-cart', { /* ... */ });
 
 // ❌ Bad - unclear names
-const store1 = createStore('s1', { /* ... */ });
-const dataStore = createStore('data', { /* ... */ });
+const useStore1 = defineStore('s1', { /* ... */ });
+const useDataStore = defineStore('data', { /* ... */ });
 ```
 
 ### Action Naming
@@ -309,30 +390,37 @@ actions: {
 
 ## Troubleshooting
 
-### DevTools Not Appearing
+### The panel is empty
 
-If DevTools don't appear:
+This is the most common problem after upgrading to 2.1, and it has one cause:
+**`enableDevTools()` was never called.** The UI mounts fine, but the bridge
+collects nothing, so there is nothing to show.
 
-1. **Check Environment**: Ensure you're in development mode
-2. **Check Mount**: Verify that `mountDevTools()` is being called
-3. **Check Console**: Look for error messages in the browser console
-4. **Check Stores**: Make sure you have at least one store created
+### DevTools not appearing at all
 
-### Stores Not Showing
+1. **Check the environment**: `mountDevTools()` with no options only renders
+   when it detects development. Pass `{ visible: true }` to force it.
+2. **Check the mount**: verify `mountDevTools()` is actually running.
+3. **Check the console** for errors.
+4. **Check the target**: if you passed a `target`, make sure the element exists
+   at mount time.
 
-If stores aren't appearing in DevTools:
+### Some stores are missing
 
-1. **Check Store Names**: Ensure stores have unique names
-2. **Check Creation**: Verify that stores are created before mounting DevTools
-3. **Check Bridge**: Ensure the DevTools bridge is properly connected
+1. **`enableDevTools()` ran too late.** It picks up stores created after it is
+   enabled. Move it to your entry point, before any store is created.
+2. **The store is in a different container.** A store in a per-request or
+   `useLocalStore` container has its own lifetime and may already be disposed.
+3. **Duplicate names.** Two stores sharing a name in one container are one
+   store — the second resolution returns the first.
 
-### Actions Not Logging
+### Actions not logging
 
-If actions aren't appearing in the Action Log:
-
-1. **Check Store Registration**: Ensure stores are properly registered
-2. **Check Action Calls**: Verify that actions are being called
-3. **Check Bridge**: Ensure the DevTools bridge is connected
+1. **The bridge is off** — see above.
+2. **Verify the action is being called**, not shadowed by a state key of the
+   same name.
+3. **Check `redact`** — a redacted payload still logs, but shows
+   `[redacted]`.
 
 ## Learn More
 

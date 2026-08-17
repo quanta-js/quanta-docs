@@ -51,7 +51,7 @@ const components = {
     th: TableHead,
     tr: TableRow,
     tbody: TableBody,
-    t: TableCell,
+    td: TableCell,
     Callout: Callout,
     PersistenceDemosWrapper,
 };
@@ -90,6 +90,7 @@ export type BaseMdxFrontmatter = {
 export async function getDocsForSlug(slug: string) {
     try {
         const contentPath = getDocsContentPath(slug);
+        if (!contentPath) return undefined;
         const rawMdx = await fs.readFile(contentPath, "utf-8");
         return await parseMdx<BaseMdxFrontmatter>(rawMdx);
     } catch (err) {
@@ -99,6 +100,7 @@ export async function getDocsForSlug(slug: string) {
 
 export async function getDocsTocs(slug: string) {
     const contentPath = getDocsContentPath(slug);
+    if (!contentPath) return [];
     const rawMdx = await fs.readFile(contentPath, "utf-8");
     // captures between ## - #### can modify accordingly
     const headingsRegex = /^(#{2,4})\s(.+)$/gm;
@@ -130,8 +132,28 @@ function sluggify(text: string) {
     return slug.replace(/[^a-z0-9-]/g, "");
 }
 
+/** Root every content read is confined to. */
+const CONTENT_ROOT = path.resolve(process.cwd(), "contents");
+
+/**
+ * Resolve a path inside `contents/`, refusing anything that escapes it.
+ *
+ * Slugs reach these helpers straight from the URL (`/docs/[[...slug]]` and the
+ * `/api/docs/raw` route), and `path.join` happily resolves `..` — so without
+ * this fence a crafted slug reads files outside the content directory.
+ * Returns `null` rather than throwing so callers keep their existing
+ * "missing content -> 404" behaviour.
+ */
+function resolveContentPath(...segments: string[]): string | null {
+    const target = path.resolve(CONTENT_ROOT, ...segments);
+    if (target !== CONTENT_ROOT && !target.startsWith(CONTENT_ROOT + path.sep)) {
+        return null;
+    }
+    return target;
+}
+
 function getDocsContentPath(slug: string) {
-    return path.join(process.cwd(), "/contents/docs/", `${slug}/index.mdx`);
+    return resolveContentPath("docs", slug, "index.mdx");
 }
 
 function justGetFrontmatterFromMD<Frontmatter>(rawMd: string): Frontmatter {
@@ -155,13 +177,20 @@ export async function getAllChilds(pathString: string) {
 
     return await Promise.all(
         page_routes_copy.map(async (it) => {
-            const totalPath = path.join(
-                process.cwd(),
-                "/contents/docs/",
+            // Segments here come from the static ROUTES table rather than
+            // the URL, but go through the same fence so a future refactor
+            // can't quietly reintroduce a traversal.
+            const totalPath = resolveContentPath(
+                "docs",
                 prevHref,
                 it.href,
                 "index.mdx"
             );
+            if (!totalPath) {
+                throw new Error(
+                    `Route "${prevHref}${it.href}" resolves outside contents/`
+                );
+            }
             const raw = await fs.readFile(totalPath, "utf-8");
             return {
                 ...justGetFrontmatterFromMD<BaseMdxFrontmatter>(raw),
@@ -237,11 +266,8 @@ export async function getAllBlogs() {
 }
 
 export async function getBlogForSlug(slug: string) {
-    const blogFile = path.join(
-        process.cwd(),
-        "/contents/blogs/",
-        `${slug}.mdx`
-    );
+    const blogFile = resolveContentPath("blogs", `${slug}.mdx`);
+    if (!blogFile) return undefined;
     try {
         const rawMdx = await fs.readFile(blogFile, "utf-8");
         return await parseMdx<BlogMdxFrontmatter>(rawMdx);
@@ -303,6 +329,7 @@ export async function getBlogFrontmatter(slug: string) {
 export async function getDocFrontmatter(path: string) {
     try {
         const contentPath = getDocsContentPath(path);
+        if (!contentPath) return undefined;
         const rawMdx = await fs.readFile(contentPath, "utf-8");
         return justGetFrontmatterFromMD<BlogMdxFrontmatter>(rawMdx);
     } catch {
@@ -441,10 +468,10 @@ function rehypeEnhancedCodeBlocks() {
 
 export async function getRawMdxForSlug(slug: string) {
     try {
-        const docsDir = path.join(process.cwd(), "contents", "docs");
         const contentPath = slug
-            ? path.join(docsDir, slug, "index.mdx")
-            : path.join(docsDir, "index.mdx");
+            ? resolveContentPath("docs", slug, "index.mdx")
+            : resolveContentPath("docs", "index.mdx");
+        if (!contentPath) return null;
         const rawMdx = await fs.readFile(contentPath, "utf-8");
         return rawMdx;
     } catch (err) {

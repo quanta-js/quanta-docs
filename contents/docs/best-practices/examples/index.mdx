@@ -14,10 +14,10 @@ This section provides complete, working examples that demonstrate real-world usa
 A complete todo application demonstrating store organization, computed values, and side effects.
 
 ```javascript
-import { createStore, watch } from '@quantajs/core';
+import { defineStore, watch } from '@quantajs/core';
 
 // Todo store with full CRUD operations
-const todoStore = createStore('todos', {
+export const useTodoStore = defineStore('todos', {
   state: () => ({
     todos: [],
     filter: 'all', // 'all', 'active', 'completed'
@@ -121,6 +121,9 @@ const todoStore = createStore('todos', {
 });
 
 // Watch for changes and sync to localStorage
+// A definition is a blueprint; resolve it to get the instance.
+const todoStore = useTodoStore();
+
 watch(() => todoStore.todos, () => {
   todoStore.saveToLocalStorage();
 });
@@ -155,9 +158,9 @@ console.log(todoStore.filteredTodos); // Only completed todos
 A complete authentication system with user management, session handling, and API integration.
 
 ```javascript
-import { createStore, watch } from '@quantajs/core';
+import { defineStore, watch } from '@quantajs/core';
 
-const authStore = createStore('auth', {
+export const useAuthStore = defineStore('auth', {
   state: () => ({
     user: null,
     token: null,
@@ -333,6 +336,8 @@ const authStore = createStore('auth', {
 });
 
 // Watch for authentication state changes
+const authStore = useAuthStore();
+
 watch(() => authStore.isAuthenticated, (isAuthenticated) => {
   if (isAuthenticated) {
     console.log('User authenticated:', authStore.user.name);
@@ -371,9 +376,9 @@ try {
 A complete e-commerce cart system with product management, pricing calculations, and persistence.
 
 ```javascript
-import { createStore, watch } from '@quantajs/core';
+import { defineStore, watch } from '@quantajs/core';
 
-const cartStore = createStore('cart', {
+export const useCartStore = defineStore('cart', {
   state: () => ({
     items: [],
     isOpen: false,
@@ -487,6 +492,8 @@ const cartStore = createStore('cart', {
 });
 
 // Watch for cart changes
+const cartStore = useCartStore();
+
 watch(() => cartStore.items, (items) => {
   console.log('Cart updated:', items.length, 'items');
 });
@@ -528,10 +535,11 @@ A full-featured todo application using QuantaJS React integration.
 
 ```jsx
 import React, { useState } from 'react';
-import { createStore, QuantaProvider, useStore, useQuantaSelector } from '@quantajs/react';
+import { defineStore } from '@quantajs/core';
+import { useQuantaValue, useQuantaActions } from '@quantajs/react';
 
 // Create the todo store
-const todoStore = createStore('todos', {
+export const useTodoStore = defineStore('todos', {
   state: () => ({
     todos: [],
     filter: 'all',
@@ -578,7 +586,7 @@ const todoStore = createStore('todos', {
 
 // Todo Item Component
 function TodoItem({ todo }) {
-  const store = useStore('todos');
+  const store = useQuantaActions(useTodoStore);
   
   return (
     <li style={{ 
@@ -619,7 +627,7 @@ function TodoItem({ todo }) {
 
 // Todo List Component
 function TodoList() {
-  const todos = useQuantaSelector(todoStore, store => store.filteredTodos);
+  const todos = useQuantaValue(useTodoStore, store => store.filteredTodos);
   
   if (todos.length === 0) {
     return <p style={{ textAlign: 'center', color: '#888' }}>No todos found</p>;
@@ -636,12 +644,12 @@ function TodoList() {
 
 // Filter Component
 function TodoFilter() {
-  const filter = useQuantaSelector(todoStore, store => store.filter);
-  const completedCount = useQuantaSelector(todoStore, store => store.completedCount);
-  const pendingCount = useQuantaSelector(todoStore, store => store.pendingCount);
-  const totalCount = useQuantaSelector(todoStore, store => store.todos.length);
+  const filter = useQuantaValue(useTodoStore, store => store.filter);
+  const completedCount = useQuantaValue(useTodoStore, store => store.completedCount);
+  const pendingCount = useQuantaValue(useTodoStore, store => store.pendingCount);
+  const totalCount = useQuantaValue(useTodoStore, store => store.todos.length);
   
-  const store = useStore('todos');
+  const store = useQuantaActions(useTodoStore);
   
   return (
     <div style={{ 
@@ -732,7 +740,7 @@ function TodoFilter() {
 // Add Todo Component
 function AddTodo() {
   const [text, setText] = useState('');
-  const store = useStore('todos');
+  const store = useQuantaActions(useTodoStore);
   
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -776,7 +784,7 @@ function TodoApp() {
 // App Component with Provider
 function App() {
   return (
-    <QuantaProvider stores={{ todos: todoStore }}>
+    <QuantaProvider>
       <TodoApp />
     </QuantaProvider>
   );
@@ -791,10 +799,11 @@ A comprehensive user dashboard demonstrating multiple stores and complex state m
 
 ```jsx
 import React from 'react';
-import { createStore, QuantaProvider, useStore, useQuantaSelector } from '@quantajs/react';
+import { defineStore } from '@quantajs/core';
+import { useQuantaValue, useQuantaActions } from '@quantajs/react';
 
 // User store
-const userStore = createStore('user', {
+export const useUserStore = defineStore('user', {
   state: () => ({
     user: null,
     isLoading: false,
@@ -837,7 +846,7 @@ const userStore = createStore('user', {
 });
 
 // Dashboard store
-const dashboardStore = createStore('dashboard', {
+export const useDashboardStore = defineStore('dashboard', {
   state: () => ({
     stats: {
       totalUsers: 0,
@@ -877,7 +886,7 @@ const dashboardStore = createStore('dashboard', {
 function LoginForm() {
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
-  const store = useStore('user');
+  const store = useQuantaActions(useUserStore);
   
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -952,8 +961,8 @@ function LoginForm() {
 
 // Stats Component
 function Stats() {
-  const stats = useQuantaSelector(dashboardStore, store => store.stats);
-  const isLoading = useQuantaSelector(dashboardStore, store => store.isLoading);
+  const stats = useQuantaValue(useDashboardStore, store => store.stats);
+  const isLoading = useQuantaValue(useDashboardStore, store => store.isLoading);
   
   if (isLoading) {
     return <div>Loading stats...</div>;
@@ -1008,7 +1017,7 @@ function Stats() {
 
 // Recent Activity Component
 function RecentActivity() {
-  const activity = useQuantaSelector(dashboardStore, store => store.recentActivity);
+  const activity = useQuantaValue(useDashboardStore, store => store.recentActivity);
   
   return (
     <div style={{ 
@@ -1041,15 +1050,18 @@ function RecentActivity() {
 
 // Dashboard Component
 function Dashboard() {
-  const user = useQuantaSelector(userStore, store => store.user);
-  const store = useStore('user');
-  
+  const user = useQuantaValue(useUserStore, store => store.user);
+  const store = useQuantaActions(useUserStore);
+  // Resolved through the hook so it comes from the provider's container —
+  // calling useDashboardStore() directly would read the ambient one.
+  const dashboard = useQuantaActions(useDashboardStore);
+
   React.useEffect(() => {
     if (user) {
-      dashboardStore.fetchStats();
-      dashboardStore.fetchRecentActivity();
+      dashboard.fetchStats();
+      dashboard.fetchRecentActivity();
     }
-  }, [user]);
+  }, [user, dashboard]);
   
   return (
     <div style={{ padding: '20px' }}>
@@ -1083,10 +1095,10 @@ function Dashboard() {
 
 // Main App Component
 function App() {
-  const isAuthenticated = useQuantaSelector(userStore, store => store.isAuthenticated);
+  const isAuthenticated = useQuantaValue(useUserStore, store => store.isAuthenticated);
   
   return (
-    <QuantaProvider stores={{ user: userStore, dashboard: dashboardStore }}>
+    <QuantaProvider>
       {isAuthenticated ? <Dashboard /> : <LoginForm />}
     </QuantaProvider>
   );

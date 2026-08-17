@@ -1,11 +1,16 @@
 ---
 title: React Integration
-description: Use QuantaJS with React using provider-based and direct-store patterns.
+description: Hooks, providers and containers for using QuantaJS in React.
 ---
 
 # React Integration
 
-`@quantajs/react` provides React-specific hooks and components on top of `@quantajs/core`.
+`@quantajs/react` provides React bindings on top of `@quantajs/core`, built on
+`useSyncExternalStore` so they are concurrent-safe.
+
+The package is **7.3 kB raw / 2.8 kB gzipped** as of 2.1 — Preact and the
+DevTools UI are no longer bundled in, and `@quantajs/devtools` is an optional
+peer loaded behind a dynamic import.
 
 ## Installation
 
@@ -17,117 +22,256 @@ pnpm add @quantajs/react @quantajs/core
 yarn add @quantajs/react @quantajs/core
 ```
 
-## Provider Pattern
+## The shortest version
 
 ```tsx
-import { createStore, QuantaProvider, useStore } from '@quantajs/react';
+// stores/cart.ts
+import { defineStore } from '@quantajs/core';
 
-const counterStore = createStore('counter', {
-  state: () => ({ count: 0 }),
+export const useCartStore = defineStore('cart', {
+  state: () => ({ items: [] as Item[] }),
+  getters: { total: (s) => s.items.reduce((n, i) => n + i.price, 0) },
   actions: {
-    increment() {
-      this.count++;
-    },
+    add(item: Item) { this.items.push(item); },
+  },
+});
+```
+
+```tsx
+import { useQuanta } from '@quantajs/react';
+import { useCartStore } from './stores/cart';
+
+function Cart() {
+  const cart = useQuanta(useCartStore);
+  return (
+    <>
+      <p>{cart.items.length} items — ${cart.total}</p>
+      <button onClick={() => cart.add({ id: 1, price: 9.99 })}>Add</button>
+    </>
+  );
+}
+```
+
+No provider needed. Hooks resolve against the nearest provider's container if
+there is one, and against the ambient container otherwise.
+
+## Choosing a hook
+
+| Hook | Subscribes to | Use when |
+|---|---|---|
+| `useQuanta(def)` | the whole store | the component reads several things and re-rendering on any change is fine |
+| `useQuantaValue(def, sel)` | only what `sel` reads | the component reads one slice of a store that changes often |
+| `useQuantaActions(def)` | nothing | the component only calls actions |
+| `useLocalStore(def)` | the whole store, per mount | the store belongs to one component instance |
+
+### `useQuanta(definition)`
+
+Resolves the definition and subscribes to every change.
+
+```tsx
+const cart = useQuanta(useCartStore);
+cart.total;            // getter
+cart.add(item);        // action
+cart.checkout.pending; // action lifecycle
+```
+
+### `useQuantaValue(definition, selector, options?)`
+
+Subscribes to **what the selector reads**, not to the store as a whole. A
+component reading `s.items.length` is not re-rendered by a write to
+`s.couponCode`.
+
+```tsx
+const count = useQuantaValue(useCartStore, (s) => s.items.length);
+const pending = useQuantaValue(useCartStore, (s) => s.checkout.pending);
+```
+
+For selectors that return a fresh object each call, pass a comparator:
+
+```tsx
+import { shallow } from '@quantajs/react';
+
+const stats = useQuantaValue(
+  useCartStore,
+  (s) => ({ count: s.items.length, total: s.total }),
+  { equalityFn: shallow },
+);
+```
+
+`options` also accepts any `equalityFn: (a: T, b: T) => boolean` of your own.
+
+<Note title="Selector semantics changed in 2.1">
+Selectors used to be compared by result. Against mutable proxies that was
+broken in both directions: `s => s.todos` returned the same proxy after an
+in-place mutation so nothing re-rendered, and `s => s.todos.filter(…)` returned
+a new array every time so everything re-rendered. Tracking reads instead fixes
+both. If you wrote memoisation workarounds around a selector, you can probably
+delete them.
+</Note>
+
+### `useQuantaActions(definition)`
+
+Resolves the store **without** subscribing. A component that only dispatches
+never re-renders on state changes.
+
+```tsx
+function AddButton() {
+  const cart = useQuantaActions(useCartStore);
+  return <button onClick={() => cart.add(item)}>Add</button>;
+}
+```
+
+<Note type="warning">
+Resolve through a hook, not by calling the definition directly inside a
+component. `useCartStore()` bypasses the provider and reads the *ambient*
+container, so under a `<QuantaProvider container={…}>` it would hand you a
+different cart than the rest of the page. `useQuantaActions` is the
+zero-subscription way to get the store from the right container.
+</Note>
+
+### `useLocalStore(definition)`
+
+Gives each mount its own container, disposed on unmount. Two instances of the
+component never share state.
+
+```tsx
+import { defineStore } from '@quantajs/core';
+import { useLocalStore } from '@quantajs/react';
+
+const useWizardStore = defineStore('wizard', {
+  state: () => ({ step: 1 }),
+  actions: {
+    next() { this.step = Math.min(3, this.step + 1); },
+    back() { this.step = Math.max(1, this.step - 1); },
   },
 });
 
-function Counter() {
-  const counter = useStore('counter');
-  return <button onClick={() => counter.increment()}>{counter.count}</button>;
-}
-
-export default function App() {
+function Wizard() {
+  const wizard = useLocalStore(useWizardStore);
   return (
-    <QuantaProvider stores={{ counter: counterStore }}>
-      <Counter />
-    </QuantaProvider>
+    <p>
+      step {wizard.step}/3
+      <button onClick={() => wizard.back()}>back</button>
+      <button onClick={() => wizard.next()}>next</button>
+    </p>
   );
 }
+
+// <Wizard /> <Wizard />  — independent.
 ```
 
-## Hook Reference (Practical)
+This replaces `useCreateStore`, which took loose `state` / `getters` / `actions`
+arguments and could not be typed properly. StrictMode's double
+mount/unmount/remount rebuilds the container rather than handing back a
+disposed store.
 
-### `useStore(name)`
-
-Returns the full store instance from `QuantaProvider` context.
+## `QuantaProvider`
 
 ```tsx
-const userStore = useStore('user');
-userStore.updateProfile({ name: 'Ava' });
+import { QuantaProvider } from '@quantajs/react';
+
+<QuantaProvider>            {/* creates and owns a container */}
+<QuantaProvider container={container}>  {/* you own its lifetime */}
+<QuantaProvider snapshot={snapshot}>    {/* hydrates server state */}
 ```
 
-### `useStoreSelector(name, selector)`
+| Prop | Description |
+|---|---|
+| `container` | The container stores resolve into. Omit and the provider creates one, disposing it on unmount. Pass one — per request — under SSR. |
+| `snapshot` | Server state from `container.dehydrate()`, applied **during** the first render rather than in an effect. |
 
-Returns selected data from a context store and re-renders only when that selection changes.
+<Note title="No more `stores` prop">
+2.0.0's `<QuantaProvider stores={{ cart, user }}>` is gone. The provider carries
+a container; stores resolve into it lazily on first use, so you no longer
+enumerate them up front.
+</Note>
 
-```tsx
-import { useStoreSelector } from '@quantajs/react';
+Hydration happens synchronously during render on purpose. An effect runs after
+the first paint, so the first client render would use default state, disagree
+with the server's markup, and correct itself a frame later — exactly the
+mismatch this avoids. See [SSR](/docs/guides/ssr).
 
-const userName = useStoreSelector('user', (s) => s.user?.name);
-```
+## Lower-level hooks
+
+These take a **resolved store**, not a definition. Reach for them when you
+already have the instance.
 
 ### `useQuantaStore(store)`
 
-Subscribes to a direct store reference and returns the full store.
-
 ```tsx
-import { useQuantaStore } from '@quantajs/react';
-
-const todos = useQuantaStore(todoStore);
+const cart = useQuantaStore(resolvedCartStore);
 ```
 
-### `useQuantaSelector(store, selector)`
-
-Selector variant for direct store references.
+### `useQuantaSelector(store, selector, options?)`
 
 ```tsx
-import { useQuantaSelector } from '@quantajs/react';
-
-const todoCount = useQuantaSelector(todoStore, (s) => s.todos.length);
+const count = useQuantaSelector(resolvedCartStore, (s) => s.items.length);
 ```
 
-### `useCreateStore(name, state, getters?, actions?)`
+`useQuanta` and `useQuantaValue` are these two plus container resolution, which
+is why they are the ones to prefer.
 
-Creates a component-scoped store instance and destroys it on unmount.
+### `useWatch(store, source, callback)`
+
+Runs a side effect when the watched value changes.
 
 ```tsx
-import { useCreateStore } from '@quantajs/react';
+useWatch(cart, (s) => s.items.length, (count) => {
+  toast(`cart has ${count} item(s)`);
+});
+```
 
-function DraftEditor() {
-  const draft = useCreateStore(
-    'draft-editor',
-    () => ({ text: '' }),
-    undefined,
-    {
-      setText(value: string) {
-        this.text = value;
-      },
-    },
+### `useComputed(store, fn)`
+
+A cached derivation that only recomputes when the values it read change.
+Useful for expensive derivations that do not belong in the store itself.
+
+```tsx
+const cart = useQuantaActions(useCartStore);
+const withTax = useComputed(cart, (s) => s.total * 1.0825);
+```
+
+Resolve the store with `useQuantaActions` here rather than `useQuanta` —
+`useComputed` owns the fine-grained subscription, so a whole-store subscription
+on top of it is redundant.
+
+## Async actions in components
+
+```tsx
+function CheckoutButton() {
+  const cart = useQuantaActions(useCartStore);
+  const pending = useQuantaValue(useCartStore, (s) => s.checkout.pending);
+  const error = useQuantaValue(useCartStore, (s) => s.checkout.error);
+
+  return (
+    <>
+      <button
+        // The action rethrows so a caller can handle one specific call.
+        // This component reads `error` instead, so it silences the rejection.
+        onClick={() => cart.checkout().catch(() => {})}
+        disabled={pending}
+      >
+        {pending ? 'Checking out…' : 'Checkout'}
+      </button>
+      {pending && <button onClick={() => cart.checkout.abort()}>Cancel</button>}
+      {error && <span role="alert">{error.message}</span>}
+    </>
   );
-
-  return <textarea value={draft.text} onChange={(e) => draft.setText(e.currentTarget.value)} />;
 }
 ```
 
-## Multiple Stores
+See [Async Actions](/docs/guides/async-actions).
+
+## DevTools
+
+DevTools is opt-in as of 2.1 and attaches to `window` only after you enable it:
 
 ```tsx
-<QuantaProvider stores={{ user: userStore, todos: todoStore }}>
-  <Dashboard />
-</QuantaProvider>
-```
+import { enableDevTools, QuantaDevTools } from '@quantajs/react';
 
-Then consume by name:
-
-```tsx
-const user = useStore('user');
-const todos = useStore('todos');
-```
-
-## React DevTools Component
-
-```tsx
-import { QuantaDevTools } from '@quantajs/react';
+if (process.env.NODE_ENV === 'development') {
+  enableDevTools();
+}
 
 function AppShell() {
   return (
@@ -139,8 +283,32 @@ function AppShell() {
 }
 ```
 
+`@quantajs/devtools` is an optional peer dependency loaded through a dynamic
+import, so it does not enter your production bundle.
+
+## Re-exports
+
+`@quantajs/react` re-exports the core API you are likely to need alongside the
+hooks — `defineStore`, `createStore`, `createContainer`, `reactive`, `computed`,
+`watch`, `effect`, `batchEffects`, `enableDevTools` and more — so a React app
+can import from one place.
+
+```tsx
+import { defineStore, useQuanta } from '@quantajs/react';
+```
+
 ## Tips
 
-- Prefer `useStoreSelector` / `useQuantaSelector` for large views.
-- Keep store names stable and unique.
-- For temporary component state with actions/getters, prefer `useCreateStore`.
+- Prefer `useQuantaValue` over `useQuanta` in views that render a lot.
+- Use `useQuantaActions` for components that only dispatch.
+- Resolve stores through hooks, never by calling the definition inside a
+  component — the hooks are what respect the provider's container.
+- Define stores at module scope; a definition holds no state, so it is safe
+  there.
+
+## Learn More
+
+- [defineStore](/docs/api/define-store)
+- [Containers](/docs/api/containers)
+- [Next.js Integration](/docs/integration/nextjs-integration)
+- [Migrating to 2.1](/docs/getting-started/migration)

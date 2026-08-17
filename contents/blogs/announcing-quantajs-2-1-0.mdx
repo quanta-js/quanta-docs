@@ -1,0 +1,378 @@
+---
+title: "Announcing QuantaJS 2.1.0: Containers, SSR, and a Lot of Fixed Bugs"
+description: "2.1.0 brings defineStore, per-request containers, SSR hydration and a built-in async action lifecycle — plus fixes for the packaging, security and reactivity defects that shipped in 2.0.0."
+date: "17-08-2026"
+authors:
+  - username: "Jeel Gajera"
+    handle: "jeelgajera"
+    handleUrl: "https://github.com/jeelgajera"
+    avatar: "https://avatars.githubusercontent.com/u/83470656?v=4"
+cover: "https://images.pexels.com/photos/29518292/pexels-photo-29518292.jpeg"
+---
+
+# Announcing QuantaJS 2.1.0
+
+QuantaJS `2.1.0` is out.
+
+It is a minor release that contains source-breaking changes, which needs
+explaining up front: 2.0.0 saw effectively no adoption, and shipping this as
+3.0.0 would have implied a migration cost almost nobody has to pay. The
+[migration guide](/docs/getting-started/migration) is short, and most of it is
+mechanical.
+
+There are two halves to this release. The first is a set of fixes for things
+that were simply broken in 2.0.0 — three of the four claims on the tin did not
+hold. The second is the feature work those fixes made room for: `defineStore`,
+containers, SSR, and an async action lifecycle.
+
+I would rather write about the second half. Let me do the first half anyway,
+because a state library asks you to trust it, and trust is built by saying what
+went wrong.
+
+---
+
+## What was broken
+
+### `require('@quantajs/core')` returned an empty object
+
+Core emitted UMD as `index.js` inside a `"type": "module"` package. Node parsed
+it as ESM, which did not crash — it took the UMD wrapper's global-assignment
+branch. So `require()` gave you `{}`, and 18 exports were quietly written to
+`globalThis.QuantaJS`.
+
+Now it ships real ESM **and** real CJS.
+
+### `@quantajs/react` shipped no types
+
+Its declarations came from vite-plugin-dts's API-Extractor rollup, which
+silently produced `export { }`. Not "incomplete types" — *no* types, with no
+error. They now come from `tsc`, which fails loudly.
+
+### The React bundle was 7× bigger than it needed to be
+
+| | 2.0.0 | 2.1.0 |
+|---|---|---|
+| `@quantajs/react` raw | 86.9 kB | **7.3 kB** |
+| `@quantajs/react` gzip | 20.1 kB | **2.8 kB** |
+
+Preact and the entire DevTools UI were bundled into the React package.
+`@quantajs/devtools` is now an optional peer behind a dynamic import,
+`react/jsx-runtime` is external, `'use client'` survives the build for the
+Next.js App Router, and both packages declare `sideEffects: false`.
+
+### DevTools was on in production
+
+This is the one that matters most.
+
+The DevTools bridge enabled itself whenever `process.env.NODE_ENV` was not
+statically replaced at build time. That check holds under Vite, webpack and
+Next.js — and fails everywhere else: a CDN bundle, Deno, a plain
+`<script type="module">`. In those environments the bridge stayed on in
+production and attached itself to `window` at import time, exposing every
+store's full contents and every argument to every action — which routinely
+means tokens, credentials and personal data — to anything running on the page.
+
+Environment detection was the wrong mechanism for a security boundary.
+DevTools is now opt-in:
+
+```ts
+import { enableDevTools } from '@quantajs/core';
+
+if (process.env.NODE_ENV === 'development') {
+  enableDevTools({ redact: ['token', 'user.ssn'] });
+}
+```
+
+There is no longer an environment in which it turns itself on.
+
+### Prototype pollution on every ingest path
+
+Every path where outside data reached state — persistence load, cross-tab sync,
+migrations, transforms, SSR snapshots — now rejects `__proto__`, `constructor`
+and `prototype`. Cross-tab sync additionally checks `storageArea`, contains
+parse failures, and refuses payloads claiming a newer schema version than the
+running code. A throwing DevTools listener can no longer break application
+state writes.
+
+### Deep triggers bypassed batching
+
+`bubbleTrigger` called `Dependency.notify()` directly, skipping both the batch
+queue and effect schedulers. Two consequences: `batchEffects()` silently did
+not apply to nested state, and computeds fed by nested state recomputed eagerly
+instead of invalidating.
+
+`Dependency` is now a container only, which makes that particular mistake
+unrepresentable rather than merely fixed.
+
+Alongside it: adding a property invalidates `Object.keys` / `for...in` / spread
+dependents; parent links are pruned on reassignment and delete, so detached
+objects no longer cause phantom invalidations or retain subtrees; array mutators
+trigger once per call instead of three times; and `track()` returns early when
+nothing is tracking, so reads outside an effect stop allocating bookkeeping
+nobody consumes.
+
+### A computed could be one write stale
+
+This one was found by the new in-repo `examples/vanilla` app, which is exactly
+why it exists.
+
+A store's coarse "something changed" notifier and a getter's cache-invalidation
+are separate effects triggered by the same write, and both were deferred to the
+same `batchEffects` flush. The notifier happened to flush first — so it could
+read the getter *before* its cache had been invalidated. The symptom: a
+`computed` read through `store.subscribe()` was correct every other mutation,
+once the getter had been read at least once.
+
+Getter invalidation now runs immediately rather than waiting its turn in the
+batch queue.
+
+---
+
+## What's new
+
+### `defineStore` and containers
+
+The name-based registry was a module-global `Map`. That one fact caused three
+separate problems:
+
+- A module-scope store was a **process-wide singleton**. On a server, one
+  request's data was visible to the next. No error, no warning.
+- `useStore<S, G, A>('cart')` forced callers to restate three generics, so in
+  practice most consumers got `any`.
+- Duplicate names threw, which is hostile to HMR, React StrictMode and repeated
+  test setup.
+
+`defineStore` returns an accessor. A container is the unit of isolation.
+
+```ts
+export const useCartStore = defineStore('cart', {
+  state: () => ({ items: [] as Item[] }),
+  getters: {
+    total: (s) => s.items.reduce((n, i) => n + i.price, 0),
+  },
+  actions: {
+    add(item: Item) {
+      this.items.push(item);   // `this` is the whole store, typed
+    },
+  },
+});
+
+const cart = useCartStore();           // ambient container
+const scoped = useCartStore(request);  // per-request instance
+```
+
+A definition holds no state, so it is safe at module scope and safe to share
+across requests. Resolving the same name twice in one container returns the
+existing instance, so creation is idempotent — which is what makes HMR,
+StrictMode and test setup safe instead of throwing. `getOrCreateStore`, which
+existed only to work around the throw, is gone.
+
+And because you call the definition rather than looking up a string, everything
+is inferred. No generics anywhere.
+
+### SSR
+
+```ts
+const container = createContainer();
+const cart = useCartStore(container);
+await cart.load(req.userId);
+
+const html = renderToString(<App />);
+const snapshot = container.dehydrate();
+container.dispose();
+```
+
+```tsx
+<QuantaProvider snapshot={snapshot}>
+  <App />
+</QuantaProvider>
+```
+
+`<QuantaProvider snapshot={…}>` hydrates **during render, not in an effect**.
+That distinction is the whole point: an effect runs after the first paint, so
+the first client render would use default state, disagree with the server's
+markup, and correct itself a frame later — precisely the hydration mismatch
+this is meant to prevent.
+
+A snapshot for a store that does not exist yet is held until it is first
+resolved, so hydration order does not matter — a lazily-created store behind a
+code-split route still gets its server state. `structuredClone` preserves
+`Date`, `Map` and `Set` that a JSON round-trip would destroy.
+
+Storage adapters are SSR-safe now too: they degrade to a no-op on the server
+instead of throwing from their constructor.
+
+### Async action lifecycle
+
+Every action carries this, whether or not it is async:
+
+```ts
+store.load.pending   // boolean, reactive
+store.load.error     // Error | null
+store.load.abort()
+this.$signal         // AbortSignal, inside the action
+```
+
+Which means this:
+
+```ts
+actions: {
+  async checkout() {
+    this.isLoading = true;
+    this.error = null;
+    try {
+      await api.checkout(this.items);
+      this.items = [];
+    } catch (e) {
+      this.error = e.message;
+    } finally {
+      this.isLoading = false;   // forget this once and the button stays disabled
+    }
+  },
+}
+```
+
+becomes this:
+
+```ts
+actions: {
+  async checkout() {
+    await api.checkout(this.items);
+    this.items = [];
+  },
+}
+```
+
+Attaching it to synchronous actions too — where `pending` is simply never
+observably true — means making an action async later is not a breaking change
+for its callers.
+
+It is deliberately minimal: loading, error, cancellation. No caching, no
+deduplication, no retries, no invalidation. Those belong to a server-state
+library, and a half-built version of them here would be worse than none.
+
+One implementation note, because it was a real bug caught late: `pending` and
+`error` live on a reactive object *separate* from `state`, so the store's
+coarse change-notifier has to depend on both. It initially did not — a raw
+`effect()` reading `pending` woke correctly, but `store.subscribe()` never
+fired, which made a loading flag appear to work only when the action also
+happened to write state at around the same moment. Intermittently correct is
+the worst failure mode there is.
+
+### React
+
+`useQuantaSelector` now tracks **what the selector reads** rather than comparing
+its result. The old comparison was broken in both directions against mutable
+proxies:
+
+- `s => s.todos` returned the same proxy identity after an in-place mutation, so
+  the component never re-rendered.
+- `s => s.todos.filter(…)` returned a fresh array every time, so it re-rendered
+  on every unrelated change.
+
+Both are fixed, and subscriptions are fine-grained as a result: a component
+reading `s.a` is not woken by a write to `s.b`. `equalityFn` and a `shallow`
+comparator are there if you want to narrow further.
+
+New hooks:
+
+| Hook | Subscribes to |
+|---|---|
+| `useQuanta(def)` | the whole store |
+| `useQuantaValue(def, sel)` | only what the selector reads |
+| `useQuantaActions(def)` | nothing — for dispatch-only components |
+| `useLocalStore(def)` | a container per component instance |
+
+`useComputed` survives a StrictMode remount, and inline selectors no longer
+resubscribe on every render.
+
+### Also
+
+`store.$patch(partial)` and `$patch(mutator)` for batched updates. `store.$id`.
+`$reset()` runs as one batch. `store.$hydrated` is an awaitable promise
+replacing the polling `$persist.isRehydrated()`. Persistence `clear()` re-arms
+auto-save instead of disabling it for the session, `save()` always writes, and
+the slice is serialised once per write rather than twice per mutation.
+
+Getters now take priority over shadowed state, matching the warning the library
+was already emitting. (Previously state won, contradicting its own warning. The
+state value remains reachable at `store.state.x`.)
+
+New from the reactivity core: `effect`, `effectScope`, `untrack`, `nextTick`,
+`toRaw`, `markRaw`, `readonly`, `shallowReactive`, `shallowReadonly`, `isProxy`,
+`isReadonly`.
+
+---
+
+## Things you can delete
+
+If you carried any of these over, they are no longer needed:
+
+- **`this.items = [...this.items]`** after a `push`. It was never required, and
+  nested mutation is now reliably tracked through the same batching and
+  scheduler path as direct writes. It costs a copy and buys nothing.
+- **Manually-synced derived state.** A `total` field kept in sync by an
+  `updateTotal()` action should be a getter. Getters are cached and cannot drift
+  out of sync.
+- **Hand-rolled `isLoading` / `error` fields.** Every action already has them.
+- **Memoisation workarounds around selectors.** The selector was the problem,
+  and it is fixed.
+
+## Migrating
+
+| Before | After |
+|---|---|
+| `createStore(name, options)` at module scope | `defineStore(name, options)`, then call it |
+| `useStore('cart')` from `@quantajs/react` | `useQuanta(useCartStore)` |
+| `useStoreSelector('cart', fn)` | `useQuantaValue(useCartStore, fn)` |
+| `useCreateStore(...)` | `useLocalStore(definition)` |
+| `<QuantaProvider stores={{ cart }}>` | `<QuantaProvider container={container}>` |
+| `getOrCreateStore(...)` | removed — resolution is idempotent per container |
+| DevTools on by default | `enableDevTools()` explicitly |
+| `$persist.isRehydrated()` polling | `await store.$hydrated` |
+
+The one change that needs real thought: **server code must create a container
+per request.** The ambient container is shared across every request in the
+process. Getting this wrong does not throw — it silently shows one visitor
+another visitor's data.
+
+Full details in the [migration guide](/docs/getting-started/migration).
+
+## Verified, not asserted
+
+Everything above is exercised by an `examples/` directory in the repository —
+a vanilla app, a React + Vite app, and a Next.js App Router app — which CI
+builds and runs on every change, including a real `next build`. That is where
+the stale-computed bug came from. Docs can drift; an app that has to build
+cannot.
+
+```bash
+git clone https://github.com/quanta-js/quanta
+cd quanta/examples/nextjs-app && pnpm install && pnpm dev
+```
+
+## What's next
+
+A **patch stream**: an RFC-6902 JSON Patch feed of every state change. It is
+designed and deliberately not in this release — it is the foundation for
+time-travel debugging, optimistic updates with real rollback, and syncing state
+across a network without shipping whole snapshots. It deserves its own release
+rather than being tacked onto this one.
+
+---
+
+## Install
+
+```bash
+npm install @quantajs/core
+npm install @quantajs/react   # if you use React
+```
+
+- [Migration guide](/docs/getting-started/migration)
+- [defineStore](/docs/api/define-store)
+- [Containers](/docs/api/containers)
+- [Server-Side Rendering](/docs/guides/ssr)
+- [Async Actions](/docs/guides/async-actions)
+
+If you find something wrong, [open an issue](https://github.com/quanta-js/quanta/issues).
+That is how the last set of these got found.

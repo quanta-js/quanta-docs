@@ -1,0 +1,262 @@
+---
+title: Migrating to 2.1
+description: What changed from 2.0.0, why, and how to update your code.
+---
+
+# Migrating to 2.1
+
+2.1 is a **minor** release that contains source-breaking API changes. That
+combination is unusual, so it deserves an explanation: 2.0.0 saw effectively no
+adoption, and shipping the fixes as 3.0.0 would have implied a migration cost
+that almost nobody actually has to pay. If you are on 2.0.0, this page is the
+whole migration.
+
+Most of it is mechanical. The one change that needs thought is
+[containers on the server](#server-code-needs-a-container-per-request).
+
+## At a glance
+
+| 2.0.0 | 2.1.0 | |
+|---|---|---|
+| `createStore(name, options)` at module scope | `defineStore(name, options)`, then call it | *recommended* |
+| `useStore('cart')` from `@quantajs/react` | `useQuanta(useCartStore)` | **removed** |
+| `useStoreSelector('cart', fn)` | `useQuantaValue(useCartStore, fn)` | **removed** |
+| `useCreateStore(name, state, getters, actions)` | `useLocalStore(definition)` | **removed** |
+| `useQuantaStore(store)` | `useQuanta(definition)` | *recommended* |
+| `useQuantaSelector(store, fn)` | `useQuantaValue(definition, fn)` | *recommended* |
+| `<QuantaProvider stores={{ cart }}>` | `<QuantaProvider container={container}>` | **removed prop** |
+| `getOrCreateStore(...)` | resolution is idempotent per container | **removed** |
+| DevTools on by default | `enableDevTools()` explicitly | *behaviour* |
+| `$persist.isRehydrated()` polling | `await store.$hydrated` | *behaviour* |
+
+`createStore`, `useQuantaStore` and `useQuantaSelector` still exist and still
+work — those rows are recommendations, not removals. The rows marked
+**removed** are the ones that will fail to compile.
+
+`useStore(name)` also still exists, but only in `@quantajs/core`, and it is now
+a **lookup**: it returns a loosely-typed store and throws if no store with that
+name has been created in the container yet. The React re-export is gone.
+
+## Stores: `defineStore`
+
+```diff
+- import { createStore } from '@quantajs/core';
+-
+- export const cartStore = createStore('cart', {
++ import { defineStore } from '@quantajs/core';
++
++ export const useCartStore = defineStore('cart', {
+    state: () => ({ items: [] as Item[] }),
+    getters: { total: (s) => s.items.reduce((n, i) => n + i.price, 0) },
+    actions: { add(item: Item) { this.items.push(item); } },
+  });
+```
+
+Then call it where you need the instance:
+
+```diff
+- cartStore.add(item);
++ const cart = useCartStore();
++ cart.add(item);
+```
+
+**Why.** `defineStore` returns a blueprint that holds no state, so it is safe at
+module scope even on a server, and the instance you get back is fully inferred
+without restating generics.
+
+`createStore` still exists and now takes an optional third argument, a
+container. It is the right choice in a script or a test where you want the
+instance immediately.
+
+## The name-based registry
+
+```diff
+- const cart = useStore('cart');
++ const cart = useCartStore();
+```
+
+`@quantajs/core` still exports `useStore(name, container?)`, but it is a lookup
+that throws if the store has not been created yet, and it returns a
+loosely-typed store — there is nothing for TypeScript to infer from a string.
+The old `useStore<S, G, A>('cart')` form asked you to restate three generics at
+every call site, which in practice meant most consumers silently got `any`.
+`@quantajs/react` no longer re-exports it; use `useQuanta(definition)`.
+
+Duplicate names no longer throw. Resolving the same name twice in one container
+returns the existing instance, which is what makes HMR, StrictMode double
+mounts and repeated test setup safe. `getOrCreateStore` existed to work around
+the throw and has been removed.
+
+## React
+
+### Provider
+
+```diff
+- <QuantaProvider stores={{ cart: cartStore, user: userStore }}>
++ <QuantaProvider>
+    <App />
+  </QuantaProvider>
+```
+
+There is no store map any more. The provider carries a **container**; stores
+resolve into it on first use. Omit the `container` prop in a client-only app
+and the provider creates one for itself. Pass one in when you need to control
+its lifetime — most importantly per request under SSR:
+
+```tsx
+<QuantaProvider container={container}>…</QuantaProvider>
+<QuantaProvider snapshot={snapshot}>…</QuantaProvider>
+```
+
+You can also drop the provider entirely in a client-only app; hooks fall back
+to the ambient container.
+
+### Hooks
+
+```diff
+- const cart = useStore('cart');
+- const cart = useQuantaStore(cartStore);
++ const cart = useQuanta(useCartStore);
+
+- const count = useStoreSelector('cart', (s) => s.items.length);
+- const count = useQuantaSelector(cartStore, (s) => s.items.length);
++ const count = useQuantaValue(useCartStore, (s) => s.items.length);
+```
+
+New in 2.1:
+
+- `useQuantaActions(definition)` — resolve a store **without** subscribing, for
+  components that only call actions and never read state.
+- `useLocalStore(definition)` — a container per component instance, replacing
+  `useCreateStore`.
+
+```diff
+- const draft = useCreateStore('draft', () => ({ text: '' }), undefined, {
+-   setText(value) { this.text = value; },
+- });
++ // module scope
++ const useDraftStore = defineStore('draft', {
++   state: () => ({ text: '' }),
++   actions: { setText(value: string) { this.text = value; } },
++ });
++
++ // in the component
++ const draft = useLocalStore(useDraftStore);
+```
+
+`useLocalStore` gives each mount its own container, so two instances of the
+component never share state, and disposes it on unmount.
+
+### Selector behaviour changed
+
+`useQuantaSelector` now tracks **what the selector reads** rather than comparing
+its result. The old comparison was broken in both directions against mutable
+proxies:
+
+- `s => s.todos` returned the same proxy identity after an in-place mutation,
+  so the component never re-rendered.
+- `s => s.todos.filter(…)` returned a fresh array every time, so the component
+  re-rendered on every unrelated change.
+
+Both are fixed, and subscriptions are fine-grained as a result: a component
+reading `s.a` is not woken by a write to `s.b`. `equalityFn` and a `shallow`
+comparator are available if you want to narrow further.
+
+If you had memoisation workarounds around a selector, you can probably delete
+them.
+
+## Server code needs a container per request
+
+This is the one behavioural change that can bite silently.
+
+The ambient container is shared across every request in a Node process, so a
+store resolved without an explicit container on the server is a cross-request
+singleton. Request A's data is visible to request B.
+
+```diff
+  export async function handler(req, res) {
+-   const user = useUserStore();
++   const container = createContainer(req.id);
++   try {
++     const user = useUserStore(container);
+      await user.load(req.userId);
+-     res.send(render());
++     res.send(render(container));
++   } finally {
++     container.dispose();
++   }
+  }
+```
+
+See the [SSR guide](/docs/guides/ssr) for the full flow including
+`dehydrate()` / `hydrate()`.
+
+## DevTools is opt-in
+
+```diff
++ import { enableDevTools } from '@quantajs/core';
++
++ if (import.meta.env.DEV) enableDevTools();
+```
+
+DevTools previously attached to `window` in **any** build where
+`process.env.NODE_ENV` was not statically replaced — a CDN bundle, Deno, a plain
+`<script type="module">`. That exposed all state and every action argument to
+anything running on the page. It now attaches only after you call
+`enableDevTools()`, which also takes a `redact` option for state paths and
+action arguments.
+
+## Persistence rehydration
+
+```diff
+- while (!store.$persist.isRehydrated()) await tick();
++ await store.$hydrated;
+```
+
+`$hydrated` is a promise that resolves once persisted state has been restored.
+
+Two behaviour fixes you may have worked around: `clear()` now re-arms auto-save
+instead of disabling it for the rest of the session, and `save()` always
+writes.
+
+## Getters now win over shadowed state
+
+If a getter and a state key share a name, the **getter** takes priority on the
+flattened store. Previously state won, which contradicted the warning the
+library itself emitted. The state value is still reachable at `store.state.x`.
+
+Best not to shadow at all — you will get a development warning either way.
+
+## Things you can now delete
+
+- **Array/object reassignment workarounds.** `this.items = [...this.items]` was
+  never required, and deep triggers now route through the same batching and
+  scheduler path as direct ones, so nested mutation is reliably tracked.
+  `this.items.push(x)` is enough.
+- **Manually-synced derived state.** If you kept a `total` field in sync with an
+  `updateTotal()` action, make it a getter.
+- **Hand-rolled loading and error flags.** Every action already has
+  `pending` and `error`. See [Async Actions](/docs/guides/async-actions).
+
+## Packaging fixes (no code change needed)
+
+Worth knowing, because they may have been the reason something did not work in
+2.0.0:
+
+- `require('@quantajs/core')` returned `{}` and wrote 18 exports to
+  `globalThis.QuantaJS`. Core shipped UMD as `index.js` inside a
+  `"type": "module"` package, so Node parsed it as ESM and took the
+  global-assignment branch. It now ships real ESM and CJS.
+- `@quantajs/react` shipped `export { }` as its type declarations — no types at
+  all. They now come from `tsc`.
+- `@quantajs/react` went from 86.9 kB raw / 20.1 kB gzip to **7.3 kB / 2.8 kB
+  gzip**: Preact and the DevTools UI are no longer bundled, `@quantajs/devtools`
+  is an optional peer behind a dynamic import, `react/jsx-runtime` is external,
+  and `'use client'` is preserved for the Next.js App Router.
+
+## Learn More
+
+- [defineStore](/docs/api/define-store)
+- [Containers](/docs/api/containers)
+- [Server-Side Rendering](/docs/guides/ssr)
+- [Async Actions](/docs/guides/async-actions)

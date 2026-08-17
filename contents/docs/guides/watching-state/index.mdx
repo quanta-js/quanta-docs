@@ -5,6 +5,14 @@ description: Learn how to watch for state changes in QuantaJS.
 
 # Watching State
 
+<Note title="These examples use `createStore`">
+`createStore` builds a store instance immediately and is still fully supported.
+In application code prefer [`defineStore`](/docs/api/define-store), which
+returns an accessor you call — it is safe at module scope on a server and needs
+no container passed around. Everything on this page applies to both.
+</Note>
+
+
 The `watch` function in QuantaJS allows you to react to state changes and execute side effects. It's perfect for logging, API calls, DOM updates, and other side effects that need to happen when state changes.
 
 ## Basic Usage

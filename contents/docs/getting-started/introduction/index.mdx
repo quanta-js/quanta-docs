@@ -18,12 +18,13 @@ The goal was simple: take the best parts of modern state management (reactive st
 ## Why QuantaJS Will Steal Your Heart
 
 - **Freedom Unleashed**: Works anywhere JavaScript does — vanilla, React, Vue, or beyond. No framework? No problem.
-- **Reactivity Redefined**: Say goodbye to clunky boilerplate. Our reactive magic tracks changes effortlessly, from simple counters to complex nested maps.
+- **Reactivity Redefined**: Say goodbye to clunky boilerplate. Changes are tracked automatically, from simple counters to deeply nested objects, arrays, `Map`s and `Set`s. No reassignment tricks required.
+- **Typed Without the Ceremony**: State, getters and actions are inferred end to end. You never restate a generic, and `this` inside an action is the whole store, fully typed.
+- **Server-Safe by Construction**: Containers give you per-request isolation, so one user's state cannot leak into another's — plus `dehydrate()` / `hydrate()` for SSR.
+- **Async, Batteries Included**: Every action carries `pending`, `error` and `abort()`. No hand-rolled loading flags.
 - **Scales Like a Dream**: Tiny scripts or massive systems — QuantaJS grows with you, never weighing you down.
-- **Side Effects, Sorted**: Async actions feel natural, not forced. Fetch data, update state, and watch it flow.
-- **API That Clicks**: Learn it in minutes, master it in hours — coding with QuantaJS feels like second nature.
-- **React Optimized**: Built-in React integration with hooks and components for seamless React development.
-- **DevTools Included**: Powerful debugging tools with real-time store inspection, action logging, and persistence management.
+- **React Optimized**: Hooks built on `useSyncExternalStore`, fine-grained selectors, and a 2.8 kB gzipped bundle.
+- **DevTools, Opt-In**: Real-time store inspection, action logging and persistence management — attached only when you ask for it.
 
 QuantaJS combines simplicity with power, offering a lightweight alternative to traditional state management libraries. Whether you're building a small prototype or a large-scale app, QuantaJS adapts to your needs without unnecessary complexity.
 
@@ -32,17 +33,17 @@ QuantaJS combines simplicity with power, offering a lightweight alternative to t
 QuantaJS is designed as a modular ecosystem of focused packages, so you install only what you need:
 
 ### @quantajs/core
-The framework-agnostic reactivity engine. Includes stores, reactive state, computed values, watchers, and persistence — everything needed for state management in any JavaScript environment.
+The framework-agnostic reactivity engine. Stores, containers, reactive state, computed values, watchers, effects, SSR hydration and persistence — everything needed for state management in any JavaScript environment. Ships real ESM **and** CJS.
 
 ```javascript
-import { createStore, reactive, computed, watch } from '@quantajs/core';
+import { defineStore, createContainer, reactive, computed, watch } from '@quantajs/core';
 ```
 
 ### @quantajs/react
-React bindings built on `useSyncExternalStore` for concurrent-safe, automatic re-renders. Provides hooks like `useStore`, `useQuantaStore`, and `useCreateStore`, plus the `QuantaProvider` component.
+React bindings built on `useSyncExternalStore` for concurrent-safe, automatic re-renders — **7.3 kB raw / 2.8 kB gzipped**. Provides `useQuanta`, `useQuantaValue`, `useQuantaActions`, `useLocalStore`, `useWatch`, `useComputed` and the `QuantaProvider` component.
 
 ```javascript
-import { useQuantaStore, QuantaProvider, useStore } from '@quantajs/react';
+import { useQuanta, useQuantaValue, QuantaProvider } from '@quantajs/react';
 ```
 
 ### @quantajs/devtools
@@ -62,48 +63,73 @@ Here's a sneak peek at what QuantaJS can do:
 
 ### Core Usage
 ```javascript
-import { createStore } from '@quantajs/core';
+import { defineStore } from '@quantajs/core';
 
-const counter = createStore('counter', {
+export const useCounterStore = defineStore('counter', {
   state: () => ({ count: 0 }),
+  getters: { doubled: (s) => s.count * 2 },
   actions: { increment() { this.count++; } },
 });
 
-counter.increment(); // Boom! State updates, reactivity kicks in.
-console.log(counter.count); // 1 — simple, yet powerful.
+const counter = useCounterStore();
+counter.increment();        // Boom! State updates, reactivity kicks in.
+console.log(counter.count);   // 1
+console.log(counter.doubled); // 2 — cached, recomputed only when `count` changes.
 ```
+
+`defineStore` returns an accessor, not an instance. That is what lets the same
+file be imported safely on a server, and what gives you full type inference
+without restating a single generic.
 
 ### React Integration
 ```javascript
-import { createStore, QuantaProvider, useStore } from '@quantajs/react';
-
-const counterStore = createStore('counter', {
-  state: () => ({ count: 0 }),
-  actions: { increment() { this.count++; } },
-});
+import { useQuanta } from '@quantajs/react';
+import { useCounterStore } from './stores/counter';
 
 function Counter() {
-  const store = useStore('counter');
+  const counter = useQuanta(useCounterStore);
   return (
     <div>
-      <p>Count: {store.count}</p>
-      <button onClick={() => store.increment()}>Increment</button>
+      <p>Count: {counter.count}</p>
+      <button onClick={() => counter.increment()}>Increment</button>
     </div>
   );
 }
-
-function App() {
-  return (
-    <QuantaProvider stores={{ counter: counterStore }}>
-      <Counter />
-    </QuantaProvider>
-  );
-}
 ```
+
+No provider required in a client-only app. Add
+[`<QuantaProvider>`](/docs/integration/react-integration) when you need to
+control the container's lifetime — mostly under SSR.
+
+### Async, Without Boilerplate
+```javascript
+export const useUsersStore = defineStore('users', {
+  state: () => ({ list: [] }),
+  actions: {
+    async load() {
+      const res = await fetch('/api/users', { signal: this.$signal });
+      this.list = await res.json();
+    },
+  },
+});
+```
+
+```jsx
+const users = useQuanta(useUsersStore);
+
+<button disabled={users.load.pending}>
+  {users.load.pending ? 'Loading…' : 'Load'}
+</button>
+{users.load.error && <p>{users.load.error.message}</p>}
+```
+
+No `isLoading`, no `error` field, no `finally` you can forget to write.
 
 ## Get Started
 
 Ready to dive in? Check out the [Installation](/docs/getting-started/installation) guide or explore the [Quick Start](/docs/getting-started/quick-start-guide) to see QuantaJS in action!
+
+Already on 2.0.0? [Migrating to 2.1](/docs/getting-started/migration) covers everything that changed.
 
 ## Support
 

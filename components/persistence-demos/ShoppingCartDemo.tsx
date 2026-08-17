@@ -139,15 +139,20 @@ export function ShoppingCartDemo() {
             {/* Code Snippet */}
             {showCode && (
                 <pre className={`${isDark ? 'bg-gray-900 text-green-300' : 'bg-gray-100 text-green-800'} p-3 rounded-lg text-xs overflow-x-auto mt-4 border border-gray-600`}>
-                    <code>{`actions: {
+                    <code>{`getters: {
+  // Derived, never stored - it cannot drift from items
+  total: (state) =>
+    state.items.reduce((sum, i) => sum + i.price * i.quantity, 0),
+},
+actions: {
   addItem(product) {
-    // ... mutation
-    this.items = [...this.items]; // Reassign for deep reactivity
-    this.updateTotal();
-  }
+    // Plain in-place mutation - no reassignment needed
+    this.items.push({ ...product, quantity: 1 });
+  },
 },
 persist: {
-  include: ["items", "total"], // Only essentials
+  adapter: new LocalStorageAdapter("shopping-cart"),
+  include: ["items"], // total derives from items
   debounceMs: 500,
 }`}</code>
                 </pre>

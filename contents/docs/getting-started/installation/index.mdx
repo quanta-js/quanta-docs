@@ -52,75 +52,81 @@ pnpm add @quantajs/devtools @quantajs/core
 ```
 
 <Callout type="info">
-DevTools are designed for development only. They automatically detect your development environment and won't mount in production builds.
+Install it as a dev dependency. As of 2.1 it is an optional peer of
+`@quantajs/react`, loaded through a dynamic import, and the DevTools bridge
+collects nothing until you call `enableDevTools()`.
 </Callout>
 
 ## Usage Examples
 
 ### Core Package
 ```javascript
-import { createStore, reactive, computed, watch } from '@quantajs/core';
+import { defineStore, reactive, computed, watch } from '@quantajs/core';
 
-// Create a store
-const counter = createStore('counter', {
+// Define a store — a blueprint, safe at module scope
+export const useCounterStore = defineStore('counter', {
   state: () => ({ count: 0 }),
+  getters: { doubled: (s) => s.count * 2 },
   actions: { increment() { this.count++; } },
 });
+
+// Resolve it when you need the instance
+const counter = useCounterStore();
+counter.increment();
 ```
 
 ### React Package
 ```javascript
-import { createStore, QuantaProvider, useStore } from '@quantajs/react';
+import { useQuanta } from '@quantajs/react';
+import { useCounterStore } from './stores/counter';
 
-// Create a store
-const counterStore = createStore('counter', {
-  state: () => ({ count: 0 }),
-  actions: { increment() { this.count++; } },
-});
-
-// Use in React components
 function Counter() {
-  const store = useStore('counter');
+  const counter = useQuanta(useCounterStore);
   return (
     <div>
-      <p>Count: {store.count}</p>
-      <button onClick={() => store.increment()}>Increment</button>
+      <p>Count: {counter.count}</p>
+      <button onClick={() => counter.increment()}>Increment</button>
     </div>
   );
 }
-
-// Wrap your app with QuantaProvider
-function App() {
-  return (
-    <QuantaProvider stores={{ counter: counterStore }}>
-      <Counter />
-    </QuantaProvider>
-  );
-}
 ```
+
+No provider is required in a client-only app. Add
+[`<QuantaProvider>`](/docs/integration/react-integration) when you need to
+control the store container's lifetime — mostly under
+[SSR](/docs/guides/ssr).
 
 ## DevTools Setup
 
-To enable DevTools for debugging, install and mount them:
+DevTools is **opt-in** as of 2.1: nothing is collected and nothing is attached
+to `window` until you enable it.
 
 ```javascript
+import { enableDevTools } from '@quantajs/core';
 import { mountDevTools } from '@quantajs/devtools';
 
-// Auto-detects development environment
-mountDevTools();
+if (process.env.NODE_ENV === 'development') {
+  enableDevTools();   // the bridge — collects the data
+  mountDevTools();    // the UI — renders the panel
+}
 ```
 
-For React applications, you can use the `QuantaDevTools` component:
+For React applications, use the `QuantaDevTools` component in place of
+`mountDevTools`:
 
 ```javascript
-import { QuantaDevTools } from '@quantajs/react';
+import { QuantaDevTools, enableDevTools } from '@quantajs/react';
+
+if (process.env.NODE_ENV === 'development') {
+  enableDevTools();
+}
 
 function App() {
   return (
-    <QuantaProvider stores={{ counter: counterStore }}>
+    <>
       <YourApp />
       <QuantaDevTools />
-    </QuantaProvider>
+    </>
   );
 }
 ```

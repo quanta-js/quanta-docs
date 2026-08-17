@@ -5,6 +5,14 @@ description: Learn how to use QuantaJS persistence system to save and restore st
 
 # Persistence Guide
 
+<Note title="These examples use `createStore`">
+`createStore` builds a store instance immediately and is still fully supported.
+In application code prefer [`defineStore`](/docs/api/define-store), which
+returns an accessor you call — it is safe at module scope on a server and needs
+no container passed around. Everything on this page applies to both.
+</Note>
+
+
 QuantaJS persistence system allows you to automatically save and restore store state across browser sessions, providing a seamless user experience and offline functionality.
 
 ## Getting Started
@@ -376,11 +384,15 @@ const store = createStore('lazy', {
   }
 });
 
-// Check if data has been loaded
-if (store.$persist && store.$persist.isRehydrated()) {
-  console.log('Store has been hydrated from storage');
-}
+// Wait for restoration to finish.
+await store.$hydrated;
+console.log('Store has been hydrated from storage');
 ```
+
+`$hydrated` is a promise, so there is nothing to poll. It resolves immediately
+when the store has no persistence configured, which means calling code does not
+have to branch on whether persistence is on. For a synchronous check,
+`store.$persist?.isRehydrated()` is still available.
 
 ## Cross-tab Synchronization
 

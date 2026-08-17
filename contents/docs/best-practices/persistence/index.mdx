@@ -5,6 +5,14 @@ description: Best practices for using QuantaJS persistence system effectively an
 
 # Persistence Best Practices
 
+<Note title="These examples use `createStore`">
+`createStore` builds a store instance immediately and is still fully supported.
+In application code prefer [`defineStore`](/docs/api/define-store), which
+returns an accessor you call — it is safe at module scope on a server and needs
+no container passed around. Everything on this page applies to both.
+</Note>
+
+
 This guide covers best practices for implementing persistence in your QuantaJS applications, ensuring optimal performance, reliability, and user experience.
 
 ## Storage Strategy
@@ -140,14 +148,19 @@ const store = createStore('lazy', {
   }
 });
 
-// Check hydration status before using persisted data
-function useUserData() {
-  if (!store.$persist?.isRehydrated()) {
-    return { user: null, isLoading: true };
-  }
-  
-  return { user: store.user, isLoading: false };
-}
+// Gate on restoration before using persisted data
+await store.$hydrated;
+```
+
+`$hydrated` is a promise rather than a flag to poll, and it resolves
+immediately when a store has no persistence configured — so code that awaits it
+does not have to know whether persistence is on. In React, await it once during
+app startup rather than branching in every component:
+
+```tsx
+// app entry
+await useUserStore().$hydrated;
+createRoot(el).render(<App />);
 ```
 
 ## Data Integrity

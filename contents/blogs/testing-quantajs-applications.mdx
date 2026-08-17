@@ -12,6 +12,15 @@ cover: "https://images.unsplash.com/photo-1648161650882-dd482541e152?q=80&w=1332
 
 # Testing QuantaJS Applications: A Comprehensive Guide
 
+<Note type="warning" title="Written for QuantaJS 2.0">
+The code in this post uses the 2.0 API. `useStore`, `useStoreSelector` and
+`useCreateStore` were removed from `@quantajs/react` in 2.1, and
+`<QuantaProvider>` no longer takes a `stores` prop. See the
+[2.1 migration guide](/docs/getting-started/migration) for the current
+equivalents.
+</Note>
+
+
 Testing is crucial for building reliable, maintainable applications. QuantaJS's framework-agnostic core and clear separation of concerns make it particularly testable. In this guide, we'll explore comprehensive strategies for testing QuantaJS applications, from unit testing stores to integration testing React components.
 
 ## Why Test QuantaJS Applications?

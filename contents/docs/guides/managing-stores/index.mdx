@@ -1,655 +1,392 @@
 ---
 title: Managing Stores
-description: Learn how to effectively manage stores in QuantaJS applications.
+description: Organising, composing, testing and tearing down stores in a real application.
 ---
 
 # Managing Stores
 
-QuantaJS provides powerful tools for managing state across your application. This guide covers best practices for organizing, creating, and using stores effectively.
+This guide is about the decisions you make *around* stores: how many to have,
+how they talk to each other, where they live, and how they get cleaned up.
 
-## Store Organization
+## Organisation
 
-### Single Store Pattern
+### Start with one store
 
-For smaller applications, a single store can manage all state:
+For a small app, one store is fine and easier to reason about:
 
-```javascript
-import { createStore } from '@quantajs/core';
+```ts
+import { defineStore } from '@quantajs/core';
 
-const appStore = createStore('app', {
+export const useAppStore = defineStore('app', {
   state: () => ({
-    user: null,
-    todos: [],
-    settings: {
-      theme: 'light',
-      notifications: true,
-    },
-    ui: {
-      isLoading: false,
-      sidebarOpen: false,
-    },
+    user: null as User | null,
+    todos: [] as Todo[],
+    settings: { theme: 'light', notifications: true },
   }),
   getters: {
-    isAuthenticated: (state) => !!state.user,
-    completedTodos: (state) => state.todos.filter(todo => todo.done),
-    pendingTodos: (state) => state.todos.filter(todo => !todo.done),
+    isAuthenticated: (s) => !!s.user,
+    completedTodos: (s) => s.todos.filter((t) => t.done),
   },
   actions: {
-    // User actions
-    async login(credentials) {
-      this.ui.isLoading = true;
-      try {
-        const response = await fetch('/api/login', {
-          method: 'POST',
-          body: JSON.stringify(credentials),
-        });
-        this.user = await response.json();
-      } catch (error) {
-        console.error('Login failed:', error);
-      } finally {
-        this.ui.isLoading = false;
-      }
-    },
-    logout() {
-      this.user = null;
-      this.todos = [];
-    },
-
-    // Todo actions
-    addTodo(text) {
-      this.todos.push({
-        id: Date.now(),
-        text,
-        done: false,
-        createdAt: new Date(),
-      });
-    },
-    toggleTodo(id) {
-      const todo = this.todos.find(t => t.id === id);
-      if (todo) todo.done = !todo.done;
-    },
-    removeTodo(id) {
-      this.todos = this.todos.filter(t => t.id !== id);
-    },
-
-    // Settings actions
-    updateSettings(updates) {
-      Object.assign(this.settings, updates);
+    addTodo(text: string) {
+      this.todos.push({ id: crypto.randomUUID(), text, done: false });
     },
     toggleTheme() {
       this.settings.theme = this.settings.theme === 'light' ? 'dark' : 'light';
     },
-
-    // UI actions
-    setLoading(isLoading) {
-      this.ui.isLoading = isLoading;
-    },
-    toggleSidebar() {
-      this.ui.sidebarOpen = !this.ui.sidebarOpen;
-    },
   },
 });
 ```
 
-### Multiple Stores Pattern
+### Split by domain as it grows
 
-For larger applications, split state into domain-specific stores:
+Once a store has three distinct concerns, split it. One file per store,
+one domain per store:
 
-```javascript
-// User store
-const userStore = createStore('user', {
+```
+stores/
+├── user.ts
+├── todos.ts
+├── settings.ts
+└── index.ts
+```
+
+```ts
+// stores/todos.ts
+import { defineStore } from '@quantajs/core';
+
+export const useTodosStore = defineStore('todos', {
   state: () => ({
-    user: null,
-    isLoading: false,
-    error: null,
+    todos: [] as Todo[],
+    filter: 'all' as 'all' | 'active' | 'completed',
   }),
   getters: {
-    isAuthenticated: (state) => !!state.user,
-    userRole: (state) => state.user?.role || 'guest',
+    filtered: (s) => {
+      if (s.filter === 'active') return s.todos.filter((t) => !t.done);
+      if (s.filter === 'completed') return s.todos.filter((t) => t.done);
+      return s.todos;
+    },
+    completedCount: (s) => s.todos.filter((t) => t.done).length,
   },
   actions: {
-    async login(credentials) {
-      this.isLoading = true;
-      this.error = null;
-      try {
-        const response = await fetch('/api/login', {
-          method: 'POST',
-          body: JSON.stringify(credentials),
-        });
-        this.user = await response.json();
-      } catch (error) {
-        this.error = error.message;
-      } finally {
-        this.isLoading = false;
-      }
+    async fetch() {
+      const res = await fetch('/api/todos', { signal: this.$signal });
+      this.todos = await res.json();
     },
-    logout() {
-      this.user = null;
-      this.error = null;
+    add(text: string) {
+      this.todos.push({ id: crypto.randomUUID(), text, done: false });
     },
-  },
-});
-
-// Todo store
-const todoStore = createStore('todos', {
-  state: () => ({
-    todos: [],
-    filter: 'all',
-    isLoading: false,
-  }),
-  getters: {
-    filteredTodos: (state) => {
-      switch (state.filter) {
-        case 'active':
-          return state.todos.filter(todo => !todo.done);
-        case 'completed':
-          return state.todos.filter(todo => todo.done);
-        default:
-          return state.todos;
-      }
-    },
-    completedCount: (state) => state.todos.filter(todo => todo.done).length,
-    pendingCount: (state) => state.todos.filter(todo => !todo.done).length,
-  },
-  actions: {
-    async fetchTodos() {
-      this.isLoading = true;
-      try {
-        const response = await fetch('/api/todos');
-        this.todos = await response.json();
-      } catch (error) {
-        console.error('Failed to fetch todos:', error);
-      } finally {
-        this.isLoading = false;
-      }
-    },
-    addTodo(text) {
-      this.todos.push({
-        id: Date.now(),
-        text,
-        done: false,
-        createdAt: new Date(),
-      });
-    },
-    toggleTodo(id) {
-      const todo = this.todos.find(t => t.id === id);
+    toggle(id: string) {
+      const todo = this.todos.find((t) => t.id === id);
       if (todo) todo.done = !todo.done;
     },
-    setFilter(filter) {
-      this.filter = filter;
-    },
-  },
-});
-
-// Settings store
-const settingsStore = createStore('settings', {
-  state: () => ({
-    theme: 'light',
-    language: 'en',
-    notifications: {
-      email: true,
-      push: false,
-    },
-  }),
-  actions: {
-    updateTheme(theme) {
-      this.theme = theme;
-      localStorage.setItem('theme', theme);
-    },
-    updateLanguage(language) {
-      this.language = language;
-      localStorage.setItem('language', language);
-    },
-    toggleNotification(type) {
-      this.notifications[type] = !this.notifications[type];
-    },
   },
 });
 ```
 
-## Store Communication
+Note what is *not* there: no `isLoading`, no `error`, no reassignment after
+`push`. `todos.fetch.pending` and `todos.fetch.error` already exist, and
+in-place mutation is tracked.
 
-### Cross-Store Actions
+## Derive, don't synchronise
 
-Stores can communicate with each other through actions:
+The most common state-management bug is a derived field that drifts out of
+sync with its source. If a value can be computed, make it a getter:
 
-```javascript
-const userStore = createStore('user', {
-  state: () => ({ user: null }),
+```ts
+// ❌ `total` has to be updated by hand at every mutation site.
+state: () => ({ items: [], total: 0 }),
+actions: {
+  add(item) { this.items.push(item); this.updateTotal(); },
+  remove(id) { this.items = this.items.filter(i => i.id !== id); this.updateTotal(); },
+  updateTotal() { this.total = this.items.reduce((n, i) => n + i.price, 0); },
+}
+
+// ✅ `total` cannot be wrong.
+state: () => ({ items: [] }),
+getters: { total: (s) => s.items.reduce((n, i) => n + i.price, 0) },
+actions: {
+  add(item) { this.items.push(item); },
+  remove(id) { this.items = this.items.filter(i => i.id !== id); },
+}
+```
+
+Getters are cached and only recompute when something they actually read has
+changed, so this is faster as well as more correct.
+
+## Cross-store communication
+
+A definition is a function, so one store can resolve another. Two rules keep
+this from becoming a tangle.
+
+**Resolve inside the action, not at module scope.** A module-scope resolution
+would bind to whichever container happened to be ambient when the module first
+loaded — wrong under SSR and wrong in tests.
+
+```ts
+// stores/user.ts
+import { defineStore } from '@quantajs/core';
+import { useTodosStore } from './todos';
+
+export const useUserStore = defineStore('user', {
+  state: () => ({ profile: null as User | null }),
   actions: {
-    async login(credentials) {
-      // ... login logic
-      this.user = userData;
-      
-      // Notify other stores
-      todoStore.fetchTodos();
-      settingsStore.loadUserPreferences(userData.id);
+    async login(credentials: Credentials) {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        body: JSON.stringify(credentials),
+        signal: this.$signal,
+      });
+      this.profile = await res.json();
+
+      // Resolved here, at call time.
+      await useTodosStore().fetch();
     },
     logout() {
-      this.user = null;
-      
-      // Clear other stores
-      todoStore.clearTodos();
-      settingsStore.resetToDefaults();
-    },
-  },
-});
-
-const todoStore = createStore('todos', {
-  state: () => ({ todos: [] }),
-  actions: {
-    clearTodos() {
-      this.todos = [];
-    },
-    async fetchTodos() {
-      if (!userStore.user) return;
-      
-      const response = await fetch(`/api/users/${userStore.user.id}/todos`);
-      this.todos = await response.json();
+      this.profile = null;
+      useTodosStore().clear();
     },
   },
 });
 ```
 
-### Shared State
+<Note type="warning" title="Cross-store calls and containers">
+Calling `useTodosStore()` with no argument resolves against the **ambient**
+container. In a browser that is what you want. On a server it is not — a
+cross-store call from a request-scoped store would reach into the shared
+ambient container.
 
-For shared state between stores, create a shared store:
+If a store participates in SSR, pass the container through explicitly, or keep
+the coordination in the caller rather than inside the store.
+</Note>
 
-```javascript
-const sharedStore = createStore('shared', {
-  state: () => ({
-    isLoading: false,
-    error: null,
-    notifications: [],
-  }),
+**Keep the dependency one-directional.** If `user` calls `todos` and `todos`
+calls `user`, extract the shared piece or move the coordination up into the
+component or route that owns both.
+
+## Store lifecycle
+
+### Initialisation
+
+Prefer built-in [persistence](/docs/guides/persistence) over hand-written
+`localStorage` code:
+
+```ts
+import { defineStore, LocalStorageAdapter } from '@quantajs/core';
+
+export const useSettingsStore = defineStore('settings', {
+  state: () => ({ theme: 'light', language: 'en' }),
+  persist: {
+    adapter: new LocalStorageAdapter('settings'),
+    debounceMs: 300,
+  },
+});
+
+// If you need restored state before rendering:
+await useSettingsStore().$hydrated;
+```
+
+The adapter degrades to a no-op on the server, so this file is safe to import
+in server code.
+
+### Teardown
+
+Dispose the [container](/docs/api/containers), not the stores one by one — one
+call releases every store, watcher, effect and persistence subscription in it:
+
+```ts
+container.dispose();
+```
+
+For a single store, `store.$destroy()` does the same for just that one.
+
+In tests, `destroyAllStores()` resets the ambient container in one call.
+
+## Scoping
+
+Three levels, from widest to narrowest:
+
+| Scope | How | When |
+|---|---|---|
+| App-wide | call the definition, or one `<QuantaProvider>` | most stores |
+| Per request | `createContainer()` per request | SSR — see the [SSR guide](/docs/guides/ssr) |
+| Per component instance | `useLocalStore(definition)` | a wizard, a modal, a draft editor |
+
+```tsx
+function Wizard() {
+  // Two <Wizard />s never share a step.
+  const wizard = useLocalStore(useWizardStore);
+  return <p>step {wizard.step}/3</p>;
+}
+```
+
+## Performance
+
+### Subscribe to less
+
+```tsx
+// Re-renders on any change to the store.
+const todos = useQuanta(useTodosStore);
+
+// Re-renders only when what the selector reads changes.
+const filtered = useQuantaValue(useTodosStore, (s) => s.filtered);
+
+// Never re-renders — dispatch only.
+const todos = useQuantaActions(useTodosStore);
+```
+
+For a selector returning a fresh object, pass a comparator:
+
+```tsx
+import { shallow } from '@quantajs/react';
+
+const stats = useQuantaValue(
+  useTodosStore,
+  (s) => ({ completed: s.completedCount, total: s.todos.length }),
+  { equalityFn: shallow },
+);
+```
+
+### Batch related writes
+
+Several writes inside one action or one `$patch` already coalesce into a single
+notification. Outside those, use `batchEffects`:
+
+```ts
+import { batchEffects } from '@quantajs/core';
+
+batchEffects(() => {
+  store.a = 1;
+  store.b = 2;
+  store.items.push(x);
+});
+// Subscribers and effects run once.
+```
+
+`store.$patch` is the store-scoped version:
+
+```ts
+todos.$patch({ filter: 'active' });
+todos.$patch((state) => {
+  state.todos.push(item);
+  state.filter = 'all';
+});
+```
+
+### Load lazily
+
+```ts
+actions: {
+  async loadProfile() {
+    if (this.profile || this.loadProfile.pending) return;
+    const res = await fetch(`/api/users/${this.user.id}/profile`, {
+      signal: this.$signal,
+    });
+    this.profile = await res.json();
+  },
+}
+```
+
+Checking `this.loadProfile.pending` deduplicates concurrent calls without any
+extra state.
+
+## Error handling
+
+Every action already records its own failure, so a per-store error field is
+usually redundant:
+
+```tsx
+{todos.fetch.error && <Banner>{todos.fetch.error.message}</Banner>}
+```
+
+`error` is cleared at the start of every call, so a successful retry clears the
+previous failure on its own. See [Async Actions](/docs/guides/async-actions).
+
+For failures you want to *aggregate* — a toast queue, an error-reporting sink —
+a dedicated store still makes sense:
+
+```ts
+export const useErrorsStore = defineStore('errors', {
+  state: () => ({ entries: [] as ErrorEntry[] }),
   actions: {
-    setLoading(isLoading) {
-      this.isLoading = isLoading;
-    },
-    setError(error) {
-      this.error = error;
-    },
-    addNotification(message, type = 'info') {
-      this.notifications.push({
-        id: Date.now(),
-        message,
-        type,
-        timestamp: new Date(),
+    report(error: Error, context = '') {
+      this.entries.push({
+        id: crypto.randomUUID(),
+        message: error.message,
+        context,
+        at: Date.now(),
       });
     },
-    removeNotification(id) {
-      this.notifications = this.notifications.filter(n => n.id !== id);
-    },
-  },
-});
-
-// Other stores can access shared state
-const userStore = createStore('user', {
-  state: () => ({ user: null }),
-  actions: {
-    async login(credentials) {
-      sharedStore.setLoading(true);
-      sharedStore.setError(null);
-      
-      try {
-        const response = await fetch('/api/login', {
-          method: 'POST',
-          body: JSON.stringify(credentials),
-        });
-        this.user = await response.json();
-        sharedStore.addNotification('Login successful!', 'success');
-      } catch (error) {
-        sharedStore.setError(error.message);
-        sharedStore.addNotification('Login failed', 'error');
-      } finally {
-        sharedStore.setLoading(false);
-      }
+    dismiss(id: string) {
+      this.entries = this.entries.filter((e) => e.id !== id);
     },
   },
 });
 ```
 
-## Store Lifecycle
+## Testing
 
-### Initialization
+Give each test its own container. State cannot leak between tests, and
+`dispose()` tears down watchers and persistence so nothing fires during the
+next one.
 
-Initialize stores with default values and load persisted data:
+```ts
+import { createContainer } from '@quantajs/core';
+import { beforeEach, afterEach, expect, test } from 'vitest';
+import { useTodosStore } from '../stores/todos';
 
-```javascript
-const appStore = createStore('app', {
-  state: () => ({
-    user: null,
-    settings: {
-      theme: 'light',
-      language: 'en',
-    },
-  }),
-  actions: {
-    initialize() {
-      // Load persisted settings
-      const savedTheme = localStorage.getItem('theme');
-      const savedLanguage = localStorage.getItem('language');
-      
-      if (savedTheme) this.settings.theme = savedTheme;
-      if (savedLanguage) this.settings.language = savedLanguage;
-      
-      // Check for saved user session
-      const savedUser = localStorage.getItem('user');
-      if (savedUser) {
-        try {
-          this.user = JSON.parse(savedUser);
-        } catch (error) {
-          localStorage.removeItem('user');
-        }
-      }
-    },
-    
-    persistSettings() {
-      localStorage.setItem('theme', this.settings.theme);
-      localStorage.setItem('language', this.settings.language);
-    },
-    
-    persistUser() {
-      if (this.user) {
-        localStorage.setItem('user', JSON.stringify(this.user));
-      } else {
-        localStorage.removeItem('user');
-      }
-    },
-  },
+let container: ReturnType<typeof createContainer>;
+
+beforeEach(() => {
+  container = createContainer();
+});
+afterEach(() => {
+  container.dispose();
 });
 
-// Initialize on app start
-appStore.initialize();
-```
-
-### Cleanup
-
-Clean up stores when components unmount or when needed:
-
-```javascript
-const todoStore = createStore('todos', {
-  state: () => ({ todos: [] }),
-  actions: {
-    cleanup() {
-      this.todos = [];
-      // Cancel any pending requests
-      if (this.currentRequest) {
-        this.currentRequest.abort();
-      }
-    },
-  },
+test('adding a todo', () => {
+  const todos = useTodosStore(container);
+  todos.add('write tests');
+  expect(todos.todos).toHaveLength(1);
 });
 
-// In React component
-useEffect(() => {
-  return () => {
-    todoStore.cleanup();
-  };
-}, []);
+test('starts empty', () => {
+  // A fresh container — the previous test's todo is not here.
+  expect(useTodosStore(container).todos).toHaveLength(0);
+});
+
+test('records a fetch failure', async () => {
+  const todos = useTodosStore(container);
+  vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'));
+
+  await expect(todos.fetch()).rejects.toThrow('offline');
+  expect(todos.fetch.pending).toBe(false);
+  expect(todos.fetch.error?.message).toBe('offline');
+});
 ```
 
-## Performance Optimization
+If you prefer the ambient container, `destroyAllStores()` in `afterEach` resets
+it.
 
-### Selective Updates
+## DevTools
 
-Use selectors to prevent unnecessary re-renders:
+Opt in explicitly — as of 2.1, DevTools never attaches to `window` on its own:
 
-```javascript
-// In React components
-function TodoList() {
-  // Only re-render when todos change
-  const todos = useQuantaSelector(todoStore, store => store.filteredTodos);
-  
-  return (
-    <ul>
-      {todos.map(todo => (
-        <TodoItem key={todo.id} todo={todo} />
-      ))}
-    </ul>
-  );
-}
+```ts
+import { enableDevTools } from '@quantajs/core';
 
-function TodoStats() {
-  // Only re-render when counts change
-  const stats = useQuantaSelector(todoStore, store => ({
-    completed: store.completedCount,
-    pending: store.pendingCount,
-  }));
-  
-  return (
-    <div>
-      <p>Completed: {stats.completed}</p>
-      <p>Pending: {stats.pending}</p>
-    </div>
-  );
+if (process.env.NODE_ENV === 'development') {
+  enableDevTools({ redact: ['user.token'] });
 }
 ```
 
-### Lazy Loading
-
-Load data only when needed:
-
-```javascript
-const userStore = createStore('user', {
-  state: () => ({
-    user: null,
-    profile: null,
-    isLoading: false,
-  }),
-  actions: {
-    async loadProfile() {
-      if (this.profile || !this.user) return;
-      
-      this.isLoading = true;
-      try {
-        const response = await fetch(`/api/users/${this.user.id}/profile`);
-        this.profile = await response.json();
-      } catch (error) {
-        console.error('Failed to load profile:', error);
-      } finally {
-        this.isLoading = false;
-      }
-    },
-  },
-});
-```
-
-## Error Handling
-
-### Centralized Error Handling
-
-Create a centralized error handling system:
-
-```javascript
-const errorStore = createStore('errors', {
-  state: () => ({
-    errors: [],
-    globalError: null,
-  }),
-  actions: {
-    addError(error, context = '') {
-      const errorInfo = {
-        id: Date.now(),
-        message: error.message || error,
-        context,
-        timestamp: new Date(),
-        stack: error.stack,
-      };
-      
-      this.errors.push(errorInfo);
-      this.globalError = errorInfo;
-      
-      // Log to external service
-      this.logError(errorInfo);
-    },
-    
-    clearError(id) {
-      this.errors = this.errors.filter(e => e.id !== id);
-      if (this.globalError?.id === id) {
-        this.globalError = null;
-      }
-    },
-    
-    clearAllErrors() {
-      this.errors = [];
-      this.globalError = null;
-    },
-    
-    async logError(errorInfo) {
-      try {
-        await fetch('/api/errors', {
-          method: 'POST',
-          body: JSON.stringify(errorInfo),
-        });
-      } catch (error) {
-        console.error('Failed to log error:', error);
-      }
-    },
-  },
-});
-
-// Use in other stores
-const userStore = createStore('user', {
-  state: () => ({ user: null }),
-  actions: {
-    async login(credentials) {
-      try {
-        const response = await fetch('/api/login', {
-          method: 'POST',
-          body: JSON.stringify(credentials),
-        });
-        
-        if (!response.ok) {
-          throw new Error('Login failed');
-        }
-        
-        this.user = await response.json();
-      } catch (error) {
-        errorStore.addError(error, 'user.login');
-      }
-    },
-  },
-});
-```
-
-## Testing Stores
-
-### Unit Testing
-
-Test stores in isolation:
-
-```javascript
-import { createStore } from '@quantajs/core';
-
-describe('Todo Store', () => {
-  let todoStore;
-  
-  beforeEach(() => {
-    todoStore = createStore('test-todos', {
-      state: () => ({ todos: [] }),
-      actions: {
-        addTodo(text) {
-          this.todos.push({ id: Date.now(), text, done: false });
-        },
-        toggleTodo(id) {
-          const todo = this.todos.find(t => t.id === id);
-          if (todo) todo.done = !todo.done;
-        },
-      },
-    });
-  });
-  
-  test('should add todo', () => {
-    todoStore.addTodo('Test todo');
-    expect(todoStore.todos).toHaveLength(1);
-    expect(todoStore.todos[0].text).toBe('Test todo');
-  });
-  
-  test('should toggle todo', () => {
-    todoStore.addTodo('Test todo');
-    const todo = todoStore.todos[0];
-    
-    expect(todo.done).toBe(false);
-    todoStore.toggleTodo(todo.id);
-    expect(todo.done).toBe(true);
-  });
-});
-```
-
-## Persistence Integration
-
-QuantaJS provides built-in persistence capabilities that automatically save and restore store state:
-
-### Basic Persistence Setup
-
-```javascript
-import { createStore, LocalStorageAdapter } from '@quantajs/core';
-
-const userStore = createStore('user', {
-  state: () => ({
-    user: null,
-    preferences: { theme: 'light' }
-  }),
-  persist: {
-    adapter: new LocalStorageAdapter('user-store'),
-    debounceMs: 500
-  }
-});
-
-// State is automatically saved and restored
-// No manual persistence code needed!
-```
-
-### Advanced Persistence with Migrations
-
-```javascript
-const settingsStore = createStore('settings', {
-  state: () => ({
-    theme: 'light',
-    language: 'en',
-    notifications: { email: true, push: false }
-  }),
-  persist: {
-    adapter: new LocalStorageAdapter('settings-store'),
-    version: 2,
-    migrations: {
-      2: (data) => ({
-        ...data,
-        notifications: { email: true, push: false }
-      })
-    }
-  }
-});
-```
-
-For more details on persistence, see the [Persistence Guide](/docs/guides/persistence).
-
-## Debugging with DevTools
-
-QuantaJS DevTools provide a powerful interface for inspecting and debugging your stores:
-
-- **Real-Time Inspection**: View store state, getters, and actions as they update
-- **Action Logging**: Track all state mutations with timestamps and payloads
-- **Persistence Management**: View persistence status and clear stored data
-- **Store Search**: Quickly find stores by name
-
-To use DevTools, simply mount them in your application:
-
-```javascript
-import { mountDevTools } from '@quantajs/devtools';
-
-// Auto-detects development environment
-mountDevTools();
-```
-
-For more information, see the [DevTools Guide](/docs/guides/devtools).
+See the [DevTools guide](/docs/guides/devtools).
 
 ## Learn More
 
-- [Reactive State](/docs/guides/reactive-state) - Understanding reactivity
-- [Computed Values](/docs/guides/computed-values) - Derived state
-- [Persistence Guide](/docs/guides/persistence) - Using persistence for state saving
-- [DevTools Guide](/docs/guides/devtools) - Debugging with DevTools
-- [React Integration](/docs/integration/react-integration) - React applications
-- [API Reference](/docs/api/create-store) - Complete API documentation
+- [defineStore](/docs/api/define-store)
+- [Containers](/docs/api/containers)
+- [Async Actions](/docs/guides/async-actions)
+- [Server-Side Rendering](/docs/guides/ssr)
+- [Persistence](/docs/guides/persistence)
+- [React Integration](/docs/integration/react-integration)

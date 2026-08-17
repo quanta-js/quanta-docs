@@ -5,6 +5,14 @@ description: API reference for QuantaJS persistence.
 
 # Persistence API
 
+<Note title="These examples use `createStore`">
+`createStore` builds a store instance immediately and is still fully supported.
+In application code prefer [`defineStore`](/docs/api/define-store), which
+returns an accessor you call — it is safe at module scope on a server and needs
+no container passed around. Everything on this page applies to both.
+</Note>
+
+
 QuantaJS persistence automatically saves and rehydrates store state with adapter-based storage.
 
 ## Exports
@@ -139,9 +147,36 @@ interface PersistenceManager {
 }
 ```
 
+## `store.$hydrated`
+
+```ts
+await store.$hydrated;
+```
+
+A promise that resolves once restoration has finished. Prefer it over polling
+`$persist.isRehydrated()` — it works whether or not persistence is configured
+(resolving immediately when it is not), so calling code does not have to
+branch.
+
+```ts
+// Before rendering anything that depends on restored state:
+await useSettingsStore().$hydrated;
+```
+
+`isRehydrated()` still exists for a synchronous check.
+
 ## Behavior Notes
 
 - Rehydration is attempted automatically during store setup.
 - Invalid/malformed payloads are safely rejected and routed to `onError`.
-- Cross-tab sync behavior depends on adapter capabilities.
-- Call `destroy()` to clean up persistence watchers/listeners for disposed stores.
+  Dangerous keys (`__proto__`, `constructor`, `prototype`) are rejected on every
+  ingest path — load, cross-tab sync, migrations and transforms.
+- Cross-tab sync checks `storageArea`, contains parse failures, and refuses
+  payloads claiming a newer schema version than the running code.
+- `clear()` re-arms auto-save rather than disabling it for the rest of the
+  session, and `save()` always writes — both were fixed in 2.1.
+- Adapters are SSR-safe: on the server they degrade to a no-op instead of
+  throwing from their constructor.
+- Call `destroy()` to clean up persistence watchers/listeners for disposed
+  stores — or dispose the [container](/docs/api/containers), which does it for
+  every store at once.

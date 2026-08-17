@@ -1,0 +1,255 @@
+---
+title: Server-Side Rendering
+description: Per-request containers, dehydrate/hydrate, and avoiding cross-request state leaks.
+---
+
+# Server-Side Rendering
+
+Server rendering asks two things of a state library:
+
+1. **Isolation** — one request's state must never be visible to another.
+2. **Transfer** — state the server computed must reach the client without the
+   first client render disagreeing with the server's markup.
+
+QuantaJS 2.1 answers the first with [containers](/docs/api/containers) and the
+second with `dehydrate()` / `hydrate()`.
+
+## The leak this prevents
+
+A browser is one user in one process, so a module-scope store is harmless
+there. A Node server is one process serving every request, so a module-scope
+*instance* is a **process-wide singleton**:
+
+```ts
+// ❌ On a server, every request shares this one object.
+const userStore = createStore('user', { state: () => ({ email: null }) });
+```
+
+Request A writes `userStore.email`; request B reads it. No error, no warning,
+just another user's data in someone else's page.
+
+`defineStore` fixes this by returning a blueprint that holds no state:
+
+```ts
+// ✅ Safe at module scope. State only exists once resolved against a container.
+export const useUserStore = defineStore('user', { state: () => ({ email: null }) });
+```
+
+<Note type="danger" title="The one rule">
+On the server, always pass a container explicitly. Calling a definition with no
+argument resolves against the ambient container, which is shared by every
+request in the process.
+</Note>
+
+## The flow
+
+<Stepper>
+<StepperItem title="Create a container per request">
+
+```ts
+import { createContainer } from '@quantajs/core';
+
+const container = createContainer(req.id);
+```
+
+</StepperItem>
+<StepperItem title="Fill it, passing the container explicitly">
+
+```ts
+const user = useUserStore(container);
+await user.load(req.userId);
+```
+
+</StepperItem>
+<StepperItem title="Render, then dehydrate">
+
+```ts
+const html = renderToString(
+  <QuantaProvider container={container}>
+    <App />
+  </QuantaProvider>,
+);
+
+const snapshot = container.dehydrate();
+```
+
+Dehydrate **after** rendering, so anything the render itself resolved is
+included.
+
+</StepperItem>
+<StepperItem title="Dispose">
+
+```ts
+container.dispose();
+```
+
+Releases every store, watcher, effect and persistence subscription the request
+created. Put it in a `finally`.
+
+</StepperItem>
+<StepperItem title="Hydrate on the client">
+
+```tsx
+<QuantaProvider snapshot={snapshot}>
+  <App />
+</QuantaProvider>
+```
+
+</StepperItem>
+</Stepper>
+
+## `dehydrate()` and `hydrate()`
+
+```ts
+container.dehydrate(): ContainerSnapshot   // Record<storeName, state>
+container.hydrate(snapshot): void
+```
+
+Per store, if you need finer control:
+
+```ts
+store.$dehydrate(): S
+store.$hydrate(snapshot: Partial<S>): void
+```
+
+Two properties worth knowing:
+
+- **Hydration is order-independent.** A snapshot for a store that does not
+  exist yet is held until that store is first resolved. A lazily-created store
+  behind a code-split route still receives its server state, so you do not have
+  to hydrate in the same order the server created things.
+- **`structuredClone` is used, not JSON.** `Date`, `Map` and `Set` survive the
+  round trip inside the container. (If you serialise the snapshot to HTML with
+  `JSON.stringify`, that step still has JSON's limits — see below.)
+
+## Hydration happens during render
+
+`<QuantaProvider snapshot={…}>` applies the snapshot **synchronously during the
+first render**, before children mount — not in an effect.
+
+That distinction is the whole point. An effect runs *after* the first paint, so
+the first client render would use default state, disagree with the server's
+markup, and then correct itself a frame later: a hydration mismatch and a
+visible flash. Applying during render means the first client render matches the
+server's.
+
+## Getting the snapshot into the page
+
+The snapshot has to travel through HTML, which means JSON. Two things to be
+careful about:
+
+```ts
+// Escape `<` so a string in your state cannot close the script tag.
+const json = JSON.stringify(snapshot).replace(/</g, '\\u003c');
+```
+
+```html
+<script id="__QUANTA__" type="application/json">…</script>
+```
+
+```ts
+const snapshot = JSON.parse(document.getElementById('__QUANTA__').textContent);
+```
+
+`Date`, `Map` and `Set` do not survive `JSON.stringify`. If your state holds
+them, either normalise to strings/arrays before dehydrating and rebuild on the
+client, or use a serialiser that preserves them.
+
+Incoming snapshots are sanitised on the way in — `__proto__`, `constructor` and
+`prototype` keys are rejected — so a tampered payload cannot pollute prototypes.
+That is a backstop, not a licence: a snapshot is still data you are choosing to
+trust.
+
+## Storage adapters on the server
+
+`LocalStorageAdapter` and friends degrade to a no-op on the server rather than
+throwing from their constructor, so a store with `persist` configured can be
+imported and rendered server-side without guards. Persistence resumes on the
+client.
+
+If a store both persists and hydrates, the SSR snapshot is applied first and
+the persisted value restores over it — `await store.$hydrated` tells you when
+that has finished.
+
+## Full example
+
+```tsx
+// stores.ts — module scope, safe
+import { defineStore } from '@quantajs/core';
+
+export const useUserStore = defineStore('user', {
+  state: () => ({ profile: null as Profile | null }),
+  actions: {
+    async load(id: string) {
+      const res = await fetch(`/api/users/${id}`, { signal: this.$signal });
+      this.profile = await res.json();
+    },
+  },
+});
+```
+
+```tsx
+// server.tsx
+import { createContainer } from '@quantajs/core';
+import { QuantaProvider } from '@quantajs/react';
+import { renderToString } from 'react-dom/server';
+import { useUserStore } from './stores';
+
+export async function render(req) {
+  const container = createContainer(req.id);
+  try {
+    const user = useUserStore(container);
+    await user.load(req.userId);
+
+    const html = renderToString(
+      <QuantaProvider container={container}>
+        <App />
+      </QuantaProvider>,
+    );
+
+    const snapshot = JSON.stringify(container.dehydrate()).replace(/</g, '\\u003c');
+
+    return `<div id="root">${html}</div>
+      <script id="__QUANTA__" type="application/json">${snapshot}</script>`;
+  } finally {
+    container.dispose();
+  }
+}
+```
+
+```tsx
+// client.tsx
+import { hydrateRoot } from 'react-dom/client';
+import { QuantaProvider } from '@quantajs/react';
+
+const snapshot = JSON.parse(
+  document.getElementById('__QUANTA__')!.textContent!,
+);
+
+hydrateRoot(
+  document.getElementById('root')!,
+  <QuantaProvider snapshot={snapshot}>
+    <App />
+  </QuantaProvider>,
+);
+```
+
+On the client there is no `container` prop, so the provider creates one for
+itself and disposes it on unmount. That is correct in a browser — the leak
+containers exist to prevent is a server problem.
+
+## Checklist
+
+- Stores declared with `defineStore` at module scope, never `createStore` at
+  module scope on a server.
+- A container created per request and `dispose()`d in a `finally`.
+- Every server-side resolution passes the container explicitly.
+- `dehydrate()` called after rendering.
+- `<` escaped in the serialised snapshot.
+- `<QuantaProvider snapshot={…}>` on the client, not a `useEffect`.
+
+## Learn More
+
+- [Containers](/docs/api/containers)
+- [Next.js Integration](/docs/integration/nextjs-integration)
+- [defineStore](/docs/api/define-store)

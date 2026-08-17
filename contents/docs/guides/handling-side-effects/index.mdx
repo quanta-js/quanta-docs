@@ -5,7 +5,45 @@ description: Learn how to handle side effects in QuantaJS applications.
 
 # Handling Side Effects
 
+<Note title="These examples use `createStore`">
+`createStore` builds a store instance immediately and is still fully supported.
+In application code prefer [`defineStore`](/docs/api/define-store), which
+returns an accessor you call — it is safe at module scope on a server and needs
+no container passed around. Everything on this page applies to both.
+</Note>
+
+
 Side effects are operations that interact with the outside world, such as API calls, DOM manipulation, timers, and file system operations. QuantaJS provides several ways to handle side effects effectively.
+
+## Async Actions Come With a Lifecycle
+
+Before reaching for a watcher or a hand-rolled flag: every action already
+carries `pending`, `error` and `abort()`, and `this.$signal` inside the action
+is an `AbortSignal` scoped to that call.
+
+```javascript
+export const useUsersStore = defineStore('users', {
+  state: () => ({ list: [] }),
+  actions: {
+    async load(id) {
+      const res = await fetch(`/api/users/${id}`, { signal: this.$signal });
+      this.list = await res.json();
+    },
+  },
+});
+
+const users = useUsersStore();
+users.load.pending;   // boolean, reactive
+users.load.error;     // Error | null — cleared at the start of every call
+users.load.abort();   // cancels every in-flight call
+```
+
+That covers the most common side effect — "fetch something and show a spinner"
+— without a `isLoading` field, an `error` field, or a `finally` you can forget
+to write. The rest of this page is for the effects it does *not* cover:
+reacting to a state change, syncing to an external system, timers, sockets.
+
+See [Async Actions](/docs/guides/async-actions) for the full surface.
 
 ## Using Watch for Side Effects
 
@@ -412,12 +450,15 @@ In React applications, combine QuantaJS side effects with React hooks:
 
 ```javascript
 import { useEffect } from 'react';
-import { useQuantaSelector } from '@quantajs/react';
+import { useQuantaValue, useQuantaActions } from '@quantajs/react';
+import { useUserStore } from './stores/user';
 
 function UserProfile() {
-  const user = useQuantaSelector(userStore, store => store.user);
-  const isLoading = useQuantaSelector(userStore, store => store.isLoading);
-  
+  const user = useQuantaValue(useUserStore, (s) => s.user);
+  // The action's own lifecycle — no `isLoading` field in state.
+  const isLoading = useQuantaValue(useUserStore, (s) => s.load.pending);
+  const store = useQuantaActions(useUserStore);
+
   // React-specific side effects
   useEffect(() => {
     if (user) {
@@ -430,7 +471,7 @@ function UserProfile() {
       // Set up event listeners
       const handleBeforeUnload = () => {
         // Save unsaved changes
-        userStore.saveDraft();
+        store.saveDraft();
       };
       
       window.addEventListener('beforeunload', handleBeforeUnload);
@@ -439,8 +480,8 @@ function UserProfile() {
         window.removeEventListener('beforeunload', handleBeforeUnload);
       };
     }
-  }, [user]);
-  
+  }, [user, store]);
+
   if (isLoading) return <div>Loading...</div>;
   if (!user) return <div>Please log in</div>;
   

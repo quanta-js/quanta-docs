@@ -5,13 +5,64 @@ description: API reference for @quantajs/devtools.
 
 # DevTools API
 
-Reference for `@quantajs/devtools` runtime integration.
-
-## Exports
+DevTools has two halves. The **bridge** lives in `@quantajs/core` and collects
+the data; the **UI** lives in `@quantajs/devtools` and renders it. You need
+both, and the bridge is off until you turn it on.
 
 ```ts
+import { enableDevTools, disableDevTools, devtools } from '@quantajs/core';
 import { mountDevTools, DevTools } from '@quantajs/devtools';
 ```
+
+## `enableDevTools(options?)`
+
+Attaches the bridge and starts collecting. Until this is called, nothing is
+collected and nothing is attached to `window`.
+
+```ts
+function enableDevTools(options?: DevToolsOptions): void;
+
+interface DevToolsOptions {
+  /** Property paths to redact from emitted events, e.g. ['token', 'user.ssn']. */
+  redact?: string[];
+}
+```
+
+Redaction applies to state values and to action arguments that are objects
+carrying a matching key. Matches become `[redacted]`.
+
+```ts
+if (process.env.NODE_ENV === 'development') {
+  enableDevTools({ redact: ['token', 'user.ssn'] });
+}
+```
+
+<Note type="warning">
+This is a security boundary. DevTools observes full store contents and every
+argument to every action, which routinely includes credentials and personal
+data. Before 2.1 the bridge enabled itself whenever `process.env.NODE_ENV` was
+not statically replaced — true for CDN bundles, Deno and plain
+`<script type="module">` — leaving it on in production. Guard the call and keep
+it out of production builds.
+</Note>
+
+Enable it before creating stores. It registers stores created after it is
+enabled.
+
+## `disableDevTools()`
+
+```ts
+function disableDevTools(): void;
+```
+
+Detaches the bridge and stops collecting.
+
+## `devtools`
+
+The bridge object itself, for building a custom DevTools UI. `devtools.enabled`
+reports whether collection is on. Most applications never touch this.
+
+## `@quantajs/devtools` exports
 
 - `mountDevTools(options?)`
 - `DevTools` (Preact component)
@@ -26,7 +77,7 @@ Mounts Quanta DevTools and returns a cleanup function.
 function mountDevTools(options?: DevToolsOptions): () => void;
 ```
 
-### `DevToolsOptions`
+### Mount options
 
 ```ts
 interface DevToolsOptions {
@@ -35,6 +86,12 @@ interface DevToolsOptions {
   onError?: (error: Error) => void;
 }
 ```
+
+<Note>
+This is a *different* type from core's `DevToolsOptions` above, despite the
+shared name. `visible` controls whether the panel renders; it has no effect on
+whether data is collected. That is `enableDevTools()`.
+</Note>
 
 ### Option Details
 
@@ -56,11 +113,17 @@ Returns `cleanup() => void` to unmount and release listeners/timers.
 
 ### Basic
 
+Both halves:
+
 ```ts
+import { enableDevTools } from '@quantajs/core';
 import { mountDevTools } from '@quantajs/devtools';
 
+enableDevTools();
 mountDevTools();
 ```
+
+Mounting the UI without enabling the bridge produces an empty panel.
 
 ### Custom Target
 
@@ -83,6 +146,7 @@ mountDevTools({
 
 ```ts
 if (import.meta.env.DEV) {
+  enableDevTools();
   import('@quantajs/devtools').then(({ mountDevTools }) => {
     mountDevTools();
   });
@@ -104,10 +168,17 @@ For React apps, prefer `QuantaDevTools` from `@quantajs/react`.
 
 ## Bridge Events (for context)
 
-DevTools subscribes to the global bridge exposed by Quanta core and consumes:
+Once enabled, the bridge emits:
 
 - `STORE_INIT`
 - `STATE_CHANGE`
 - `ACTION_CALL`
 
-In most apps, this is fully automatic and requires no manual bridge wiring.
+The UI subscribes to these; you do not wire it up yourself. A listener that
+throws is contained and can no longer break application state writes, which it
+could in 2.0.0.
+
+## Learn More
+
+- [DevTools Guide](/docs/guides/devtools)
+- [Migrating to 2.1](/docs/getting-started/migration)

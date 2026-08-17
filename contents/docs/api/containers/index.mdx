@@ -1,0 +1,196 @@
+---
+title: Containers
+description: API reference for createContainer — the unit of store isolation in QuantaJS 2.1.
+---
+
+# Containers
+
+A **container** is a set of store instances that are isolated from every other
+container. One per browser app, one per server request, one per test.
+
+```ts
+import { createContainer } from '@quantajs/core';
+
+const container = createContainer();
+const cart = useCartStore(container);
+```
+
+## Why containers exist
+
+Before 2.1, stores lived in one module-global registry. In a browser that is
+fine — one user, one process. On a server it is not: one Node process serves
+every request, so a module-scope store was a **process-wide singleton**.
+Request A writing `user.email` was visible to request B. No error, no warning,
+just another user's data.
+
+A container makes the isolation boundary explicit and gives you three things
+the global registry could not:
+
+- **Request isolation** under SSR.
+- **Test isolation** — a fresh container per test instead of a shared registry
+  you have to remember to reset.
+- **Component-scoped stores** — two `<Wizard>` instances that never share a
+  step. (`useLocalStore` in React is a container per mount.)
+
+## The ambient container
+
+You do not have to create one. Calling a definition with no argument resolves
+against the **ambient** container, which is created lazily on first use:
+
+```ts
+const cart = useCartStore();  // ambient
+```
+
+That is the right default in a browser and the wrong one on a server.
+
+<Note type="danger" title="Server code">
+The ambient container is shared across every request in a Node process. On a
+server, always create a container per request and pass it explicitly.
+</Note>
+
+## API
+
+### `createContainer(id?)`
+
+```ts
+function createContainer(id?: string): StoreContainer;
+```
+
+`id` is optional and only used for logs and DevTools; one is generated if you
+omit it.
+
+### `StoreContainer`
+
+| Member | Type | Description |
+|---|---|---|
+| `id` | `string` | Stable identifier. |
+| `active` | `boolean` | `false` after `dispose()`. |
+| `resolve(name, options)` | `Store` | Create or return the store for this name. Idempotent. |
+| `get(name)` | `AnyStore \| undefined` | A store already created in this container. |
+| `has(name)` | `boolean` | Whether a store with this name exists here. |
+| `keys()` | `string[]` | Names of every store in this container. |
+| `dehydrate()` | `ContainerSnapshot` | Serialisable snapshot of every store's state. |
+| `hydrate(snapshot)` | `void` | Apply a snapshot. Order-independent. |
+| `dispose()` | `void` | Destroy every store in this container. Idempotent. |
+
+You rarely call `resolve` yourself — calling a definition does it for you.
+It is there for the name-based escape hatch and for tooling.
+
+### Default-container helpers
+
+```ts
+import {
+  getDefaultContainer,
+  setDefaultContainer,
+  resetDefaultContainer,
+  destroyAllStores,
+} from '@quantajs/core';
+```
+
+| Function | Description |
+|---|---|
+| `getDefaultContainer()` | The ambient container, creating it if needed. |
+| `setDefaultContainer(c)` | Replace the ambient container. |
+| `resetDefaultContainer()` | Dispose the ambient container and forget it. |
+| `destroyAllStores()` | Dispose every store in the ambient container. Handy in test teardown. |
+
+## Patterns
+
+### One per server request
+
+```ts
+import { createContainer } from '@quantajs/core';
+
+export async function handler(req, res) {
+  const container = createContainer(req.id);
+  try {
+    const user = useUserStore(container);
+    await user.load(req.userId);
+
+    const html = renderToString(<App container={container} />);
+    const snapshot = container.dehydrate();
+
+    res.send(page(html, snapshot));
+  } finally {
+    container.dispose();
+  }
+}
+```
+
+See the [SSR guide](/docs/guides/ssr) for the client half.
+
+### One per test
+
+```ts
+import { createContainer } from '@quantajs/core';
+import { beforeEach, afterEach, expect, test } from 'vitest';
+
+let container;
+
+beforeEach(() => {
+  container = createContainer();
+});
+
+afterEach(() => {
+  container.dispose();
+});
+
+test('adding an item updates the total', () => {
+  const cart = useCartStore(container);
+  cart.add({ id: 1, price: 10 });
+  expect(cart.total).toBe(10);
+});
+```
+
+Because each test gets its own container, state cannot leak between tests and
+you never have to reset a shared registry. `dispose()` also tears down
+watchers, effects and persistence subscriptions, so nothing survives to fire
+during the next test.
+
+### One per component instance
+
+In React, `useLocalStore` creates and disposes a container per mount:
+
+```tsx
+import { useLocalStore } from '@quantajs/react';
+
+function Wizard() {
+  const wizard = useLocalStore(useWizardStore);
+  return <p>step {wizard.step}/3</p>;
+}
+
+// Two <Wizard />s never share a step.
+```
+
+### Sharing one container with a React tree
+
+```tsx
+import { QuantaProvider } from '@quantajs/react';
+
+<QuantaProvider container={container}>
+  <App />
+</QuantaProvider>
+```
+
+`useQuanta`, `useQuantaValue` and `useQuantaActions` resolve against the
+nearest provider's container, falling back to the ambient one when there is no
+provider. Omit `container` and `QuantaProvider` creates one for itself and
+disposes it on unmount; pass one in and its lifetime stays yours.
+
+## Lifetime
+
+Calling `dispose()` destroys every store in the container and marks it
+inactive. Resolving against a disposed container throws rather than silently
+handing back dead state:
+
+```ts
+container.dispose();
+useCartStore(container); // Error: Container "…": cannot resolve store "cart" after dispose().
+```
+
+## Learn More
+
+- [defineStore](/docs/api/define-store)
+- [Server-Side Rendering](/docs/guides/ssr)
+- [Next.js Integration](/docs/integration/nextjs-integration)
+- [Migrating to 2.1](/docs/getting-started/migration)

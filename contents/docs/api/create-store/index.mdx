@@ -1,281 +1,266 @@
 ---
 title: createStore
-description: API reference for the createStore function.
+description: API reference for createStore — the eager counterpart to defineStore.
 ---
 
-# CreateStore
-## `createStore`
+# createStore
 
-Creates a reactive store with state, getters, and actions.
+`createStore` builds a store **instance** immediately, in a container.
+
+```ts
+import { createStore } from '@quantajs/core';
+
+const counter = createStore('counter', {
+  state: () => ({ count: 0 }),
+  getters: { doubled: (s) => s.count * 2 },
+  actions: { increment() { this.count++; } },
+});
+
+counter.count;       // 0
+counter.increment();
+counter.doubled;     // 2
+```
+
+<Note title="Prefer defineStore in shared modules">
+[`defineStore`](/docs/api/define-store) returns an accessor instead of an
+instance. Because a definition holds no state, it is safe at module scope even
+on a server, where a module-scope *instance* is a process-wide singleton shared
+by every request. Reach for `createStore` in a script or a test where you want
+the instance right now, and in library code where you control the container.
+</Note>
 
 ## Signature
 
-```typescript
-function createStore<S, G, A>(
+```ts
+function createStore<S extends StateTree, G extends GettersTree<S>, A extends ActionsTree>(
   name: string,
   options: {
     state: () => S;
-    getters?: { [K in keyof G]: (state: S) => G[K] };
-    actions?: { [K in keyof A]: (this: StoreInstance<S, G, A>, ...args: any[]) => any };
+    getters?: G;
+    actions?: A;
     persist?: PersistenceConfig<S>;
-  }
-): StoreInstance<S, G, A>;
+  },
+  container?: StoreContainer,
+): Store<S, G, A>;
 ```
 
-## Parameters
+### Parameters
 
-- `name`: A unique string identifier for the store. Must be unique across your application.
-- `options`:
-  - `state`: A function returning the initial state object.
-  - `getters` (optional): An object of getter functions that compute derived state.
-  - `actions` (optional): An object of action methods that can modify state.
-  - `persist` (optional): Persistence configuration for automatic state saving and restoration.
+| Name | Type | Description |
+|---|---|---|
+| `name` | `string` | Unique within the container. |
+| `options.state` | `() => S` | Factory returning initial state. |
+| `options.getters` | `G` | Derived values; each receives `state`. |
+| `options.actions` | `A` | Methods; `this` is the whole store. |
+| `options.persist` | `PersistenceConfig<S>` | See [Persistence](/docs/api/persistence). |
+| `container` | `StoreContainer` | Which container to create in. Defaults to the ambient one. **Always pass one on a server.** |
 
-## Returns
+### Returns
 
-A `StoreInstance` with flattened access to state, getters, and actions.
+A `Store<S, G, A>` with flattened access to state, getters and actions.
 
-## Example
+## Idempotent per container
 
-```javascript
-import { createStore, LocalStorageAdapter } from '@quantajs/core';
+Creating the same name twice in one container returns the **existing**
+instance rather than throwing. That is what makes hot-module replacement,
+React StrictMode double-mounts and repeated test setup safe:
 
-const store = createStore('counter', {
-  state: () => ({ count: 0 }),
-  getters: { 
-    doubled: (state) => state.count * 2 
-  },
-  actions: { 
-    increment() { this.count++; } 
-  },
-  persist: {
-    adapter: new LocalStorageAdapter('counter-store'),
-    debounceMs: 500
-  }
-});
-
-console.log(store.count); // 0 (or restored value from storage)
-console.log(store.doubled); // 0 (or restored value * 2)
-store.increment();
-console.log(store.count); // 1
-console.log(store.doubled); // 2
-
-// State is automatically saved to localStorage and restored on page reload
+```ts
+const a = createStore('counter', options);
+const b = createStore('counter', options);
+a === b; // true
 ```
 
-## Store Structure
+In 2.0.0 the second call threw, which is why `getOrCreateStore` existed. It has
+been removed — this is the behaviour now.
 
-The returned store instance provides:
+## Store members
 
-- **State Properties**: Direct access to all state properties
-- **Getters**: Computed values that automatically update when dependencies change
-- **Actions**: Methods that can modify state using `this`
-- **subscribe**: Method to subscribe to store changes
-- **$reset**: Method to reset store to initial state
-- **$persist**: Persistence manager for manual persistence control (if persistence is configured)
-- **$destroy**: Method to clean up store resources and remove it from the registry
-- **notifyAll**: Method to manually notify all subscribers of changes
+Everything a store exposes beyond your own state, getters and actions:
 
-## TypeScript Support
+| Member | Description |
+|---|---|
+| `$id` | The store's registered name. |
+| `$signal` | Inside an action: an `AbortSignal` for that call. |
+| `$patch(partial \| mutator)` | Apply several changes as one batch. |
+| `$reset()` | Restore initial state, as one batch. |
+| `$persist` | `PersistenceManager`, or `null` when persistence is not configured. |
+| `$hydrated` | Promise resolving once persisted state has been restored. |
+| `$dehydrate()` | Serialisable snapshot of this store's state. |
+| `$hydrate(snapshot)` | Apply a snapshot to this store. |
+| `$destroy()` | Release effects, watchers and persistence; remove from the container. |
+| `subscribe(fn)` | Coarse change notification. Returns an unsubscribe function. |
+| `state` | The underlying reactive state object. |
 
-```typescript
-interface CounterState {
-  count: number;
-  name: string;
-}
+### `subscribe`
 
-interface CounterGetters {
-  doubled: number;
-  greeting: string;
-}
-
-interface CounterActions {
-  increment(): void;
-  decrement(): void;
-  setName(name: string): void;
-}
-
-const counterStore = createStore<CounterState, CounterGetters, CounterActions>('counter', {
-  state: () => ({ count: 0, name: 'Counter' }),
-  getters: {
-    doubled: (state) => state.count * 2,
-    greeting: (state) => `Hello ${state.name}!`,
-  },
-  actions: {
-    increment() { this.count++; },
-    decrement() { this.count--; },
-    setName(name: string) { this.name = name; },
-  },
-});
-```
-
-## Store Lifecycle Methods
-
-### subscribe
-
-Subscribe to store changes:
-
-```javascript
-const store = createStore('counter', {
-  state: () => ({ count: 0 }),
+```ts
+const unsubscribe = counter.subscribe((snapshot) => {
+  console.log('changed:', snapshot);
 });
 
-const unsubscribe = store.subscribe((snapshot) => {
-  console.log('Store changed:', snapshot);
-});
-
-// Later, unsubscribe
 unsubscribe();
 ```
 
-### $reset
+`subscribe` is coarse by design — it fires on "something changed", not on a
+specific key. It also fires when an action's `pending` or `error` flips, so a
+loading indicator built on `subscribe` works even for an action that writes no
+state. For fine-grained reactions, use [`watch`](/docs/api/watch) or, in React,
+[`useQuantaValue`](/docs/integration/react-integration).
 
-Reset the store to its initial state:
+### `$patch`
 
-```javascript
-const store = createStore('counter', {
-  state: () => ({ count: 0, name: 'Counter' }),
+Both forms apply as a **single** batch, so subscribers and effects run once
+rather than once per field.
+
+```ts
+cart.$patch({ couponCode: 'SPRING', shipping: 0 });
+
+cart.$patch((state) => {
+  state.items.push(item);
+  state.couponCode = null;
 });
-
-store.count = 10;
-store.name = 'Updated';
-
-store.$reset(); // Resets to { count: 0, name: 'Counter' }
 ```
 
-### $destroy
+### `$reset`
 
-Clean up store resources and remove it from the registry. This is useful when you need to completely remove a store:
+```ts
+counter.count = 10;
+counter.$reset(); // back to { count: 0 }, as one batch
+```
 
-```javascript
-const store = createStore('temporary', {
+### `$destroy`
+
+Removes the store from its container and releases everything it owns —
+effects, watchers, persistence subscriptions.
+
+```ts
+const temp = createStore('temporary', {
   state: () => ({ data: [] }),
-  persist: {
-    adapter: new LocalStorageAdapter('temp-store'),
+  persist: { adapter: new LocalStorageAdapter('temp') },
+});
+
+temp.$destroy();
+```
+
+Using a store after `$destroy()` is not supported. To tear down a whole group
+of stores, dispose their [container](/docs/api/containers) instead — one call
+covers all of them.
+
+## TypeScript
+
+Everything is inferred from `options`. You do not supply generics:
+
+```ts
+const counter = createStore('counter', {
+  state: () => ({ count: 0, name: 'Counter' }),
+  getters: {
+    doubled: (s) => s.count * 2,
+    greeting: (s) => `Hello ${s.name}!`,
+  },
+  actions: {
+    increment() { this.count++; },
+    setName(name: string) { this.name = name; },
   },
 });
 
-// Use the store...
-
-// When done, clean up
-store.$destroy(); // Removes store, clears subscribers, destroys persistence
+counter.doubled;   // number
+counter.greeting;  // string
+counter.setName('x');
+counter.setName(1); // ✗ Argument of type 'number' is not assignable to 'string'
 ```
 
-**Note:** After calling `$destroy()`, the store should no longer be used. Attempting to use it may result in errors.
+<Note type="warning" title="Do not pass explicit generics">
+`createStore<CounterState>('counter', …)` **breaks** inference. Supplying `S`
+fixes `G` and `A` at their defaults, so your getters and actions vanish from
+the resulting type:
 
-### notifyAll
+```ts
+const counter = createStore<CounterState>('counter', options);
+counter.doubled;   // ✗ Property 'doubled' does not exist on type 'Store<CounterState, {}, {}>'
+counter.increment; // ✗ same
+```
 
-Manually notify all subscribers of changes. This is typically used internally, but can be useful for advanced scenarios:
+An `interface` also fails the `StateTree` constraint, because interfaces do not
+get an implicit index signature. Annotate the **state factory** instead — you
+get the same checking with none of the loss:
 
-```javascript
-const store = createStore('counter', {
-  state: () => ({ count: 0 }),
+```ts
+const counter = createStore('counter', {
+  state: (): CounterState => ({ count: 0, name: 'Counter' }),
+  getters: { doubled: (s) => s.count * 2 },
+  actions: { increment() { this.count++; } },
 });
+```
+</Note>
 
-store.subscribe(() => {
-  console.log('Store updated');
-});
+Reference an interface for a nested value the same way — through the state
+factory:
 
-// Manually trigger notification
-store.notifyAll(); // All subscribers are notified
+```ts
+state: () => ({ user: null as User | null })
 ```
 
-## Store Lifecycle Management
+## Working in a container
 
-### Creating and Destroying Stores
+```ts
+import { createStore, createContainer } from '@quantajs/core';
 
-```javascript
-// Create a store
-const userStore = createStore('user', {
-  state: () => ({ user: null }),
-  persist: {
-    adapter: new LocalStorageAdapter('user-store'),
-  },
-});
+const container = createContainer();
+const counter = createStore('counter', options, container);
 
-// Use the store throughout your application
-function login(user) {
-  userStore.user = user;
-}
-
-// When the store is no longer needed (e.g., logout, cleanup)
-function cleanup() {
-  userStore.$destroy(); // Clean up resources
-}
+container.dispose(); // destroys every store created in it
 ```
 
-### Multiple Store Management
+See [Containers](/docs/api/containers).
 
-```javascript
-// Create multiple stores
-const stores = {
-  user: createStore('user', {
-    state: () => ({ user: null }),
-  }),
-  cart: createStore('cart', {
-    state: () => ({ items: [] }),
-  }),
-  settings: createStore('settings', {
-    state: () => ({ theme: 'light' }),
-  }),
-};
+## Nested state is tracked
 
-// Clean up all stores when needed
-function cleanupAllStores() {
-  Object.values(stores).forEach(store => {
-    store.$destroy();
-  });
-}
+Mutating nested state is enough — you never need to reassign an array or object
+to make a change visible:
+
+```ts
+cart.items.push(item);              // ✅ tracked
+cart.user.address.city = 'Berlin';  // ✅ tracked
+cart.items = [...cart.items];       // ❌ unnecessary copy, no benefit
 ```
 
-### React Integration with Cleanup
+Adding a property also invalidates `Object.keys` / `for...in` / spread
+dependents, and array mutators trigger once per call rather than once per
+internal write.
 
-```javascript
-import { useEffect } from 'react';
-import { useCreateStore } from '@quantajs/react';
+## Batching
 
-function Component() {
-  const store = useCreateStore('component-store', () => ({ data: [] }));
-  
-  useEffect(() => {
-    // Store is automatically cleaned up when component unmounts
-    // But you can manually clean up if needed
-    return () => {
-      store.$destroy();
-    };
-  }, []);
-  
-  return <div>{/* Component content */}</div>;
-}
-```
+Several writes in one turn already coalesce into one notification when they
+happen inside an action or a `$patch`. For writes outside those, use
+`batchEffects`:
 
-## Error Handling
-
-- **Duplicate Store Names**: Throws an error if a store with the same name already exists
-- **Invalid State**: State must be a function that returns an object
-- **Action Context**: Actions must use `this` to access store properties
-- **Name Collisions**: Throws if an action name conflicts with a state property or getter name. Getters that shadow state properties are allowed (the getter takes priority on the flattened store)
-- **Destroyed Store**: Using a store after `$destroy()` may result in errors
-
-## Batch Effects
-
-When making multiple state changes that should be treated as a single update, use `batchEffects`:
-
-```javascript
+```ts
 import { batchEffects } from '@quantajs/core';
 
-batchEffects(() => {
+const result = batchEffects(() => {
   store.count = 10;
   store.name = 'Updated';
   store.items.push(newItem);
+  return store.count;
 });
-// Effects run only once after the batch completes
+// Effects run once, after the batch. `batchEffects` returns the callback's value.
 ```
+
+## Errors
+
+| Condition | Behaviour |
+|---|---|
+| Duplicate name in the same container | Returns the existing instance |
+| `state` is not a function returning an object | Throws |
+| Action name collides with a state key or getter | Throws |
+| Getter name shadows a state key | Allowed; the getter wins on the flat store, and a warning is logged in development. The state value stays reachable at `store.state.x` |
+| Resolving in a disposed container | Throws |
 
 ## Learn More
 
-- [Reactive State](/docs/guides/reactive-state) - Understanding reactivity
-- [Computed Values](/docs/guides/computed-values) - Using getters
-- [Managing Stores](/docs/guides/managing-stores) - Store management patterns
-- [Persistence Guide](/docs/guides/persistence) - Using persistence for state saving
-- [Persistence API](/docs/api/persistence) - Complete persistence API reference
+- [defineStore](/docs/api/define-store) — the accessor form, and the default choice
+- [Containers](/docs/api/containers) — isolation, SSR and testing
+- [Async Actions](/docs/guides/async-actions) — `pending`, `error`, `abort()`
+- [Persistence API](/docs/api/persistence)
+- [Managing Stores](/docs/guides/managing-stores)

@@ -1,0 +1,258 @@
+---
+title: defineStore
+description: API reference for defineStore — the typed store accessor introduced in 2.1.
+---
+
+# defineStore
+
+`defineStore` is the entry point for every store in QuantaJS 2.1. It returns a
+**definition** — a blueprint you call to get an instance — rather than the
+instance itself.
+
+```ts
+import { defineStore } from '@quantajs/core';
+
+export const useCartStore = defineStore('cart', {
+  state: () => ({ items: [] as Item[] }),
+  getters: {
+    total: (s) => s.items.reduce((n, i) => n + i.price, 0),
+  },
+  actions: {
+    add(item: Item) {
+      this.items.push(item);
+    },
+  },
+});
+
+const cart = useCartStore();
+cart.total;      // number — inferred, no generics restated
+cart.add(item);  // fully typed
+```
+
+## Why a definition and not an instance
+
+A definition holds **no state**. State only exists once the definition is
+resolved against a [container](/docs/api/containers). That single property is
+what buys you three things:
+
+- **It is safe at module scope.** On a server, a module-scope *instance* is a
+  process-wide singleton shared by every request. A module-scope *definition*
+  is not.
+- **Types survive the call site.** The old `useStore<S, G, A>('cart')` needed
+  three generics restated at every use, so in practice most consumers got
+  `any`. Calling a definition infers everything.
+- **Resolution is idempotent.** Resolving the same name twice in one container
+  returns the same instance, which makes HMR, React StrictMode double-mounts
+  and repeated test setup safe instead of throwing.
+
+## Signature
+
+```ts
+function defineStore<S extends StateTree, G extends GettersTree<S>, A extends ActionsTree>(
+  name: string,
+  options: {
+    state: () => S;
+    getters?: G;
+    actions?: A;
+    persist?: PersistenceConfig<S>;
+  },
+): StoreDefinition<S, G, A>;
+
+interface StoreDefinition<S, G, A> {
+  /** Resolve the store. Omit the container in the browser; always pass one on a server. */
+  (container?: StoreContainer): Store<S, G, A>;
+  readonly $id: string;
+  readonly $options: StoreDefinitionOptions<S, G, A>;
+}
+```
+
+### Parameters
+
+| Name | Type | Description |
+|---|---|---|
+| `name` | `string` | Unique identifier within a container. Used by DevTools, SSR snapshots and persistence keys. |
+| `options.state` | `() => S` | Factory returning the initial state. Called once per container. |
+| `options.getters` | `G` | Derived values. Each receives `state` as its only argument. |
+| `options.actions` | `A` | Methods. `this` is the whole store — state, getters and other actions. |
+| `options.persist` | `PersistenceConfig<S>` | Optional. See [Persistence](/docs/api/persistence). |
+
+### Returns
+
+A callable `StoreDefinition`. Call it to resolve the store:
+
+```ts
+const cart = useCartStore();           // ambient container
+const scoped = useCartStore(container); // a specific container
+```
+
+## Typing state
+
+Everything is inferred from `options`, so you never pass generics.
+
+<Note type="warning" title="Do not pass explicit generics">
+`defineStore<CounterState>('counter', …)` **breaks** inference: supplying `S`
+fixes `G` and `A` at their defaults, so your getters and actions disappear from
+the resulting type. An `interface` also fails the `StateTree` constraint,
+because interfaces do not get an implicit index signature.
+
+Annotate the **state factory** instead — same checking, nothing lost:
+
+```ts
+// ✗ getters and actions vanish from the type
+const useCounter = defineStore<CounterState>('counter', options);
+
+// ✓ state is checked, getters and actions still inferred
+const useCounter = defineStore('counter', {
+  state: (): CounterState => ({ count: 0, name: 'Counter' }),
+  getters: { doubled: (s) => s.count * 2 },
+  actions: { increment() { this.count++; } },
+});
+```
+</Note>
+
+For a nested value, annotate at the property:
+
+```ts
+state: () => ({
+  user: null as User | null,
+  items: [] as Item[],
+})
+```
+
+## Getters
+
+Getters take `state` and return a derived value. They are cached and only
+recompute when a dependency they actually read has changed.
+
+```ts
+export const useCartStore = defineStore('cart', {
+  state: () => ({ items: [] as Item[], taxRate: 0.0825 }),
+  getters: {
+    subtotal: (s) => s.items.reduce((n, i) => n + i.price, 0),
+    itemCount: (s) => s.items.length,
+  },
+});
+```
+
+To derive from another getter, read it off the store rather than from `state`:
+
+```ts
+const cart = useCartStore();
+const withTax = () => cart.subtotal * (1 + cart.taxRate);
+```
+
+<Note type="warning">
+A getter whose name shadows a state key **wins** on the flattened store as of
+2.1. The state value is still reachable at `store.state.x`. Prefer not to
+shadow at all — the library warns in development when you do.
+</Note>
+
+## Actions
+
+Inside an action, `this` is the full store, so state, getters and sibling
+actions are all reachable and all typed.
+
+```ts
+export const useCartStore = defineStore('cart', {
+  state: () => ({ items: [] as Item[] }),
+  getters: {
+    total: (s) => s.items.reduce((n, i) => n + i.price, 0),
+  },
+  actions: {
+    add(item: Item) {
+      this.items.push(item);       // state
+    },
+    logTotal() {
+      console.log(this.total);     // getter
+    },
+    addAndLog(item: Item) {
+      this.add(item);              // sibling action
+      this.logTotal();
+    },
+  },
+});
+```
+
+Actions do **not** need to reassign arrays or objects to trigger reactivity.
+`this.items.push(item)` is enough — mutating nested state is tracked. (If you
+carried a `this.items = [...this.items]` workaround over from an older version,
+delete it; it costs a copy and buys nothing.)
+
+Every action — synchronous or not — carries a
+[lifecycle surface](/docs/guides/async-actions):
+
+```ts
+cart.checkout.pending   // boolean, reactive
+cart.checkout.error     // Error | null
+cart.checkout.abort()   // aborts `this.$signal`
+```
+
+## Store instance members
+
+Everything a resolved store exposes beyond your own state, getters and actions:
+
+| Member | Description |
+|---|---|
+| `$id` | The store's registered name. |
+| `$signal` | Inside an action: an `AbortSignal` tied to that call. |
+| `$patch(partial)` | Merge a partial state object in one batch. |
+| `$patch(mutator)` | Run a mutator against state in one batch. |
+| `$reset()` | Restore the initial state, as one batch. |
+| `$persist` | The `PersistenceManager`, or `null` if persistence is not configured. |
+| `$hydrated` | A promise resolving once persisted state has been restored. |
+| `$dehydrate()` | A serialisable snapshot of this store's state. |
+| `$hydrate(snapshot)` | Apply a snapshot to this store. |
+| `$destroy()` | Release effects, watchers and persistence, and remove the store from its container. |
+| `subscribe(fn)` | Coarse "something changed" notification. Returns an unsubscribe function. |
+| `state` | The underlying reactive state object. |
+
+### `$patch`
+
+Both forms apply as a **single** batch, so subscribers and effects run once
+rather than once per field.
+
+```ts
+cart.$patch({ couponCode: 'SPRING', shipping: 0 });
+
+cart.$patch((state) => {
+  state.items.push(item);
+  state.couponCode = null;
+});
+```
+
+## Creating an instance eagerly
+
+`createStore` is the eager counterpart — it returns the instance directly
+instead of an accessor. Prefer `defineStore` in shared modules; reach for
+`createStore` in a script or a test where you want the store immediately.
+
+```ts
+import { createStore, createContainer } from '@quantajs/core';
+
+const container = createContainer();
+const cart = createStore('cart', options, container);
+```
+
+See [createStore](/docs/api/create-store).
+
+## Migrating from 2.0
+
+```diff
+- import { createStore, useStore } from '@quantajs/core';
+- export const cartStore = createStore('cart', options);
+- const cart = useStore('cart');            // untyped without three generics
++ import { defineStore } from '@quantajs/core';
++ export const useCartStore = defineStore('cart', options);
++ const cart = useCartStore();              // fully typed
+```
+
+Naming the definition `useXStore` is a convention, not a requirement — it is a
+plain function, not a React hook, and it is callable outside components.
+
+## Learn More
+
+- [Containers](/docs/api/containers) — isolation, SSR and testing
+- [Async Actions](/docs/guides/async-actions) — `pending`, `error`, `abort()`
+- [Server-Side Rendering](/docs/guides/ssr) — dehydrate and hydrate
+- [React Integration](/docs/integration/react-integration)
+- [Migrating to 2.1](/docs/getting-started/migration)

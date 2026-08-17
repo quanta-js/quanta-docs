@@ -1,0 +1,175 @@
+---
+title: Async Actions
+description: Loading flags, error state and cancellation — built into every action.
+---
+
+# Async Actions
+
+Every action in QuantaJS carries a small reactive lifecycle surface. You do not
+opt in and you do not write it yourself:
+
+```ts
+cart.checkout.pending   // boolean, reactive
+cart.checkout.error     // Error | null
+cart.checkout.abort()   // aborts every in-flight call of this action
+this.$signal            // AbortSignal, inside the action
+```
+
+## The problem it removes
+
+Almost every store ends up growing the same three fields by hand:
+
+```ts
+// Before — hand-rolled, and easy to get subtly wrong
+actions: {
+  async checkout() {
+    this.isLoading = true;
+    this.error = null;
+    try {
+      await api.checkout(this.items);
+      this.items = [];
+    } catch (e) {
+      this.error = e.message;   // now a string, so the stack is gone
+    } finally {
+      this.isLoading = false;   // forget this once and the button stays disabled
+    }
+  },
+}
+```
+
+That is boilerplate in every store, it multiplies once you have more than one
+async action (`isLoadingCheckout`, `isLoadingRefresh`, …), and the `finally` is
+exactly the line people forget.
+
+```ts
+// After — the lifecycle is already there
+actions: {
+  async checkout() {
+    await api.checkout(this.items);
+    this.items = [];
+  },
+}
+```
+
+```tsx
+<button onClick={() => cart.checkout()} disabled={cart.checkout.pending}>
+  {cart.checkout.pending ? 'Checking out…' : 'Checkout'}
+</button>
+{cart.checkout.error && <p role="alert">{cart.checkout.error.message}</p>}
+```
+
+## `pending`
+
+`true` while at least one call of that action is in flight. It is backed by a
+counter, so overlapping calls behave sensibly: two concurrent `refresh()` calls
+leave `pending` true until **both** settle.
+
+It is attached to synchronous actions too, where it is simply never observably
+`true` — which is the point. Making an action async later is not a breaking
+change for any caller reading `pending`.
+
+## `error`
+
+The rejection reason from the most recent call, as an `Error` (a thrown
+non-`Error` is wrapped). It is **cleared at the start of every call**, so a
+retry that succeeds clears the previous failure without you doing anything.
+
+```ts
+cart.checkout.error;          // Error: payment declined
+await cart.checkout();        // succeeds
+cart.checkout.error;          // null
+```
+
+<Note title="Errors still propagate">
+`error` is a *record*, not a swallow. The action still rejects, so a caller
+that wants to react to one specific call can `try`/`catch` it — and one that
+does not care must not leave the rejection unhandled:
+
+```ts
+// This component reads `checkout.error` instead, so it silences the rejection
+// to avoid an unhandled-rejection warning in the console.
+cart.checkout().catch(() => {});
+```
+</Note>
+
+## `abort()` and `$signal`
+
+Inside an action, `this.$signal` is an `AbortSignal` scoped to that specific
+call. Pass it to `fetch` and cancellation works end to end:
+
+```ts
+export const useSearchStore = defineStore('search', {
+  state: () => ({ results: [] as Result[] }),
+  actions: {
+    async search(query: string) {
+      const res = await fetch(`/search?q=${query}`, { signal: this.$signal });
+      this.results = await res.json();
+    },
+  },
+});
+```
+
+`store.search.abort(reason?)` aborts every in-flight call of `search`. A
+typical use is cancelling a stale request when the component unmounts or the
+query changes:
+
+```tsx
+function Search() {
+  const search = useQuantaActions(useSearchStore);
+  const pending = useQuantaValue(useSearchStore, (s) => s.search.pending);
+
+  useEffect(() => () => search.search.abort(), [search]);
+
+  return pending ? <button onClick={() => search.search.abort()}>Cancel</button> : null;
+}
+```
+
+`$signal` only exists for the duration of the call — it is swapped in around
+the invocation rather than living on the store, so reading `store.$signal` from
+outside an action gives you nothing useful.
+
+## Reactivity
+
+`pending` and `error` live on a reactive object separate from `state`, and the
+store's change notifier depends on both. That means all of these work:
+
+- `store.subscribe()` fires when a lifecycle flag flips.
+- `useQuanta(definition)` re-renders on it.
+- `useQuantaValue(definition, s => s.save.pending)` re-renders on it, and on
+  nothing else — a component watching one action's `pending` is not woken by
+  another action's.
+- A raw `effect(() => …)` reading `store.save.pending` re-runs.
+
+One call notifies subscribers **once**, not once per field written: the
+lifecycle bookkeeping and the action body share a single batch.
+
+## Reading the flags in React
+
+Two equivalent shapes, with different subscription costs:
+
+```tsx
+// Whole-store subscription — re-renders on any cart change.
+const cart = useQuanta(useCartStore);
+cart.checkout.pending;
+
+// Narrow subscription — re-renders only when this flag changes.
+const pending = useQuantaValue(useCartStore, (s) => s.checkout.pending);
+const error = useQuantaValue(useCartStore, (s) => s.checkout.error);
+const cart = useQuantaActions(useCartStore); // resolve without subscribing
+```
+
+Prefer the second in a view that renders a lot.
+
+## What this deliberately is not
+
+There is no caching, no request deduplication, no retries, no stale-while-
+revalidate and no query invalidation. Those belong to a server-state library —
+TanStack Query, SWR — and a half-built version of them here would be worse
+than none. QuantaJS gives you loading, error and cancellation, and stays out of
+the way of a real server-cache next to it.
+
+## Learn More
+
+- [defineStore](/docs/api/define-store)
+- [Handling Side Effects](/docs/guides/handling-side-effects)
+- [React Integration](/docs/integration/react-integration)

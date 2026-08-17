@@ -12,6 +12,15 @@ cover: "https://images.unsplash.com/photo-1664140546022-33b569e69655?q=80&w=1170
 
 # Common QuantaJS Mistakes and How to Avoid Them
 
+<Note type="warning" title="Written for QuantaJS 2.0">
+The code in this post uses the 2.0 API. `useStore`, `useStoreSelector` and
+`useCreateStore` were removed from `@quantajs/react` in 2.1, and
+`<QuantaProvider>` no longer takes a `stores` prop. See the
+[2.1 migration guide](/docs/getting-started/migration) for the current
+equivalents.
+</Note>
+
+
 Every developer encounters pitfalls when learning a new library. Based on real-world usage and community feedback, we've compiled the most common mistakes developers make with QuantaJS and how to avoid them. This guide will save you hours of debugging and frustration!
 
 ## 1. Forgetting to Use `this` in Actions

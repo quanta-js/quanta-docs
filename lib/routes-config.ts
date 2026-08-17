@@ -20,6 +20,11 @@ export const ROUTES: EachRoute[] = [
                 href: "/installation",
             },
             { title: "Quick Start Guide", href: "/quick-start-guide" },
+            {
+                title: "Migrating to 2.1",
+                href: "/migration",
+                tag: "New!",
+            },
         ],
     },
     {
@@ -31,13 +36,19 @@ export const ROUTES: EachRoute[] = [
             { title: "Computed Values", href: "/computed-values" },
             { title: "Watching State", href: "/watching-state" },
             { title: "Managing Stores", href: "/managing-stores" },
-            { title: "Persistence", href: "/persistence", tag: "New!" },
+            { title: "Async Actions", href: "/async-actions", tag: "New!" },
+            {
+                title: "Server-Side Rendering",
+                href: "/ssr",
+                tag: "New!",
+            },
+            { title: "Persistence", href: "/persistence" },
             {
                 title: "Handling Side Effects",
                 href: "/handling-side-effects",
                 tag: "Beta",
             },
-            { title: "DevTools", href: "/devtools", tag: "New!" },
+            { title: "DevTools", href: "/devtools" },
         ],
     },
     {
@@ -64,13 +75,15 @@ export const ROUTES: EachRoute[] = [
         href: "/api",
         noLink: true,
         items: [
+            { title: "defineStore", href: "/define-store", tag: "New!" },
+            { title: "Containers", href: "/containers", tag: "New!" },
             { title: "createStore", href: "/create-store" },
             { title: "reactive", href: "/reactive" },
             { title: "computed", href: "/computed" },
             { title: "watch", href: "/watch" },
-            { title: "Persistence", href: "/persistence", tag: "New!" },
+            { title: "Persistence", href: "/persistence" },
             { title: "Logger", href: "/logger" },
-            { title: "DevTools", href: "/devtools", tag: "New!" },
+            { title: "DevTools", href: "/devtools" },
         ],
     },
     {

@@ -14,9 +14,9 @@ This guide provides practical tips, patterns, and examples to help you use Quant
 #### Single Store for Small Apps
 
 ```javascript
-import { createStore } from '@quantajs/core';
+import { defineStore } from '@quantajs/core';
 
-const appStore = createStore('app', {
+const useAppStore = defineStore('app', {
   state: () => ({
     user: null,
     todos: [],
@@ -62,7 +62,7 @@ const appStore = createStore('app', {
 
 ```javascript
 // User store
-const userStore = createStore('user', {
+const useUserStore = defineStore('user', {
   state: () => ({
     user: null,
     isLoading: false,
@@ -96,7 +96,7 @@ const userStore = createStore('user', {
 });
 
 // Todo store
-const todoStore = createStore('todos', {
+const useTodoStore = defineStore('todos', {
   state: () => ({
     todos: [],
     filter: 'all',
@@ -145,16 +145,18 @@ const todoStore = createStore('todos', {
 ```javascript
 import { watch } from '@quantajs/core';
 
+const todos = useTodoStore();
+
 // Good: Watch specific values
-watch(() => todoStore.todos.length, (count) => {
+watch(() => todos.todos.length, (count) => {
   console.log(`Todo count: ${count}`);
 });
 
 // Avoid: Watching entire large objects
-// watch(() => todoStore.todos, (todos) => { ... }); // Expensive!
+// watch(() => todos.todos, (list) => { ... }); // Expensive!
 
 // Good: Watch computed summaries
-watch(() => todoStore.todos.filter(todo => todo.done).length, (count) => {
+watch(() => todos.todos.filter(todo => todo.done).length, (count) => {
   console.log(`${count} todos completed`);
 });
 ```
@@ -164,7 +166,7 @@ watch(() => todoStore.todos.filter(todo => todo.done).length, (count) => {
 ```javascript
 import { computed } from '@quantajs/core';
 
-const expensiveStore = createStore('expensive', {
+const useExpensiveStore = defineStore('expensive', {
   state: () => ({
     items: Array.from({ length: 1000 }, (_, i) => ({ id: i, value: Math.random() })),
   }),
@@ -179,21 +181,23 @@ const expensiveStore = createStore('expensive', {
   },
 });
 
+const expensive = useExpensiveStore();
+
 // First access - computes the value
-console.log(expensiveStore.expensiveCalculation);
+console.log(expensive.expensiveCalculation);
 
 // Second access - uses cached value (no computation)
-console.log(expensiveStore.expensiveCalculation);
+console.log(expensive.expensiveCalculation);
 
 // Only when items change does it recompute
-expensiveStore.items.push({ id: 1000, value: 0.5 });
-console.log(expensiveStore.expensiveCalculation); // Recomputes
+expensive.items.push({ id: 1000, value: 0.5 });
+console.log(expensive.expensiveCalculation); // Recomputes
 ```
 
 ### 3. Error Handling Patterns
 
 ```javascript
-const errorStore = createStore('errors', {
+const useErrorStore = defineStore('errors', {
   state: () => ({
     errors: [],
     globalError: null,
@@ -236,7 +240,7 @@ const errorStore = createStore('errors', {
 });
 
 // Use in other stores
-const userStore = createStore('user', {
+const useUserStore = defineStore('user', {
   state: () => ({ user: null }),
   actions: {
     async login(credentials) {
@@ -252,7 +256,10 @@ const userStore = createStore('user', {
         
         this.user = await response.json();
       } catch (error) {
-        errorStore.addError(error, 'user.login');
+        // Resolved at call time, not at module scope — a module-scope
+        // resolution would bind to whichever container happened to be
+        // ambient when this file first loaded.
+        useErrorStore().addError(error, 'user.login');
       }
     },
   },
@@ -261,12 +268,13 @@ const userStore = createStore('user', {
 
 ## React Package Tips
 
-### 1. Provider Pattern (Recommended)
+### 1. Define once, resolve where you need it
 
 ```javascript
-import { createStore, QuantaProvider, useStore } from '@quantajs/react';
+// stores/counter.js
+import { defineStore } from '@quantajs/core';
 
-const counterStore = createStore('counter', {
+export const useCounterStore = defineStore('counter', {
   state: () => ({ count: 0 }),
   getters: {
     doubleCount: (state) => state.count * 2,
@@ -276,41 +284,45 @@ const counterStore = createStore('counter', {
     decrement() { this.count--; },
   },
 });
+```
 
-function App() {
-  return (
-    <QuantaProvider stores={{ counter: counterStore }}>
-      <Counter />
-    </QuantaProvider>
-  );
-}
+```javascript
+import { useQuanta } from '@quantajs/react';
+import { useCounterStore } from './stores/counter';
 
 function Counter() {
-  const store = useStore('counter');
-  
+  const counter = useQuanta(useCounterStore);
+
   return (
     <div>
-      <p>Count: {store.count}</p>
-      <p>Double: {store.doubleCount}</p>
-      <button onClick={() => store.increment()}>+</button>
-      <button onClick={() => store.decrement()}>-</button>
+      <p>Count: {counter.count}</p>
+      <p>Double: {counter.doubleCount}</p>
+      <button onClick={() => counter.increment()}>+</button>
+      <button onClick={() => counter.decrement()}>-</button>
     </div>
   );
 }
 ```
 
-### 2. Performance Optimization with Selectors
+No provider is needed in a client-only app. Add `<QuantaProvider>` when you
+want to control the container's lifetime — under
+[SSR](/docs/guides/ssr) that is per request.
+
+### 2. Subscribe to less
+
+`useQuanta` wakes on any change to the store. `useQuantaValue` subscribes to
+exactly what the selector *reads*, so a component reading `s.a` is not
+re-rendered by a write to `s.b`.
 
 ```javascript
-import { useQuantaSelector } from '@quantajs/react';
+import { useQuantaValue, useQuantaActions, shallow } from '@quantajs/react';
 
 function TodoList() {
-  // Only re-render when todos change
-  const todos = useQuantaSelector(todoStore, store => store.filteredTodos);
-  
+  const todos = useQuantaValue(useTodosStore, (s) => s.filteredTodos);
+
   return (
     <ul>
-      {todos.map(todo => (
+      {todos.map((todo) => (
         <TodoItem key={todo.id} todo={todo} />
       ))}
     </ul>
@@ -318,12 +330,14 @@ function TodoList() {
 }
 
 function TodoStats() {
-  // Only re-render when counts change
-  const stats = useQuantaSelector(todoStore, store => ({
-    completed: store.completedCount,
-    pending: store.pendingCount,
-  }));
-  
+  // A selector returning a fresh object needs a comparator, or it
+  // re-renders on every notification.
+  const stats = useQuantaValue(
+    useTodosStore,
+    (s) => ({ completed: s.completedCount, pending: s.pendingCount }),
+    { equalityFn: shallow },
+  );
+
   return (
     <div>
       <p>Completed: {stats.completed}</p>
@@ -332,162 +346,156 @@ function TodoStats() {
   );
 }
 
-function ExpensiveComponent() {
-  // Only re-render when specific values change
-  const expensiveValue = useQuantaSelector(store, store => 
-    store.items
-      .filter(item => item.active)
-      .map(item => item.value)
-      .reduce((sum, val) => sum + val, 0)
-  );
-  
-  return <div>Expensive calculation: {expensiveValue}</div>;
+/** Dispatch-only: resolves the store without subscribing, so it never
+ *  re-renders on a state change. */
+function AddTodoButton() {
+  const todos = useQuantaActions(useTodosStore);
+  return <button onClick={() => todos.add('New task')}>Add</button>;
 }
 ```
 
-### 3. Component-Scoped Stores
+<Note title="Put expensive derivations in a getter">
+A heavy computation inside a selector runs on every notification. Move it into
+the store as a getter — getters are cached and recompute only when something
+they read has changed — or use `useComputed`, which caches the same way.
 
 ```javascript
-import { useCreateStore } from '@quantajs/react';
+// ❌ recomputed on every notification
+const total = useQuantaValue(useCartStore, (s) =>
+  s.items.filter((i) => i.active).reduce((n, i) => n + i.value, 0),
+);
 
-function TodoComponent() {
-  const todoStore = useCreateStore(
-    'todos',
-    () => ({ todos: [] }),
-    {
-      activeCount: (state) => state.todos.filter(todo => !todo.done).length,
-    },
-    {
-      addTodo(text) {
-        this.todos.push({ id: Date.now(), text, done: false });
-      },
-      toggleTodo(id) {
-        const todo = this.todos.find(t => t.id === id);
-        if (todo) todo.done = !todo.done;
-      },
-    }
-  );
-
-  return (
-    <div>
-      <button onClick={() => todoStore.addTodo('New task')}>
-        Add Todo
-      </button>
-      <p>Todos: {todoStore.todos.length}</p>
-      <p>Active: {todoStore.activeCount}</p>
-    </div>
-  );
+// ✅ cached in the store
+getters: {
+  activeTotal: (s) => s.items.filter((i) => i.active)
+                             .reduce((n, i) => n + i.value, 0),
 }
+const total = useQuantaValue(useCartStore, (s) => s.activeTotal);
 ```
+</Note>
 
-### 4. Multiple Stores with Context
+### 3. Component-scoped stores
+
+`useLocalStore` gives each mount its own container, disposed on unmount, so two
+instances of the component never share state.
 
 ```javascript
-import { createStore, QuantaProvider, useStore } from '@quantajs/react';
+// stores/todo-widget.js
+import { defineStore } from '@quantajs/core';
 
-const userStore = createStore('user', {
-  state: () => ({ user: null, isLoading: false }),
-  actions: {
-    async login(credentials) {
-      this.isLoading = true;
-      // API call...
-      this.user = userData;
-      this.isLoading = false;
-    },
-  },
-});
-
-const todoStore = createStore('todos', {
+export const useTodoWidgetStore = defineStore('todo-widget', {
   state: () => ({ todos: [] }),
+  getters: {
+    activeCount: (state) => state.todos.filter((t) => !t.done).length,
+  },
   actions: {
     addTodo(text) {
-      this.todos.push({ id: Date.now(), text, done: false });
+      this.todos.push({ id: crypto.randomUUID(), text, done: false });
+    },
+    toggleTodo(id) {
+      const todo = this.todos.find((t) => t.id === id);
+      if (todo) todo.done = !todo.done;
     },
   },
 });
+```
 
-function App() {
+```javascript
+import { useLocalStore } from '@quantajs/react';
+
+function TodoWidget() {
+  const todos = useLocalStore(useTodoWidgetStore);
+
   return (
-    <QuantaProvider stores={{ user: userStore, todos: todoStore }}>
-      <UserDashboard />
-    </QuantaProvider>
+    <div>
+      <button onClick={() => todos.addTodo('New task')}>Add Todo</button>
+      <p>Todos: {todos.todos.length}</p>
+      <p>Active: {todos.activeCount}</p>
+    </div>
   );
 }
 
+// <TodoWidget /> <TodoWidget />  — independent lists.
+```
+
+This replaces `useCreateStore`, whose loose `state` / `getters` / `actions`
+arguments could not be typed properly.
+
+### 4. Multiple stores
+
+There is no store map to register. Each definition resolves into the container
+on first use.
+
+```javascript
+// stores/index.js
+export { useUserStore } from './user';
+export { useTodosStore } from './todos';
+```
+
+```javascript
+import { useQuanta } from '@quantajs/react';
+import { useUserStore, useTodosStore } from './stores';
+
 function UserDashboard() {
-  const userStore = useStore('user');
-  const todoStore = useStore('todos');
-  
+  const user = useQuanta(useUserStore);
+  const todos = useQuanta(useTodosStore);
+
   return (
     <div>
-      <UserInfo />
-      <TodoList />
+      <h1>{user.displayName}</h1>
+      <p>{todos.todos.length} todos</p>
     </div>
   );
 }
 ```
 
-### 5. Custom Hooks for Store Logic
+### 5. Custom hooks for store logic
 
 ```javascript
 function useUser() {
-  const store = useStore('user');
-  
-  return {
-    user: store.user,
-    isLoading: store.isLoading,
-    login: store.login,
-    logout: store.logout,
-    isAuthenticated: !!store.user,
-  };
-}
+  const user = useQuanta(useUserStore);
 
-function useTodos() {
-  const store = useStore('todos');
-  
   return {
-    todos: store.todos,
-    addTodo: store.addTodo,
-    toggleTodo: store.toggleTodo,
-    removeTodo: store.removeTodo,
-    completedCount: store.todos.filter(t => t.done).length,
+    profile: user.profile,
+    // The action lifecycle is built in — no `isLoading` field to maintain.
+    isLoading: user.login.pending,
+    error: user.login.error,
+    login: user.login,
+    logout: user.logout,
+    isAuthenticated: !!user.profile,
   };
 }
 
 function UserProfile() {
-  const { user, isAuthenticated, login } = useUser();
-  
-  if (!isAuthenticated) {
-    return <LoginForm onLogin={login} />;
-  }
-  
+  const { profile, isAuthenticated, isLoading, error, login } = useUser();
+
+  if (isLoading) return <Spinner />;
+  if (!isAuthenticated) return <LoginForm onLogin={login} error={error} />;
+
   return (
     <div>
-      <h1>{user.name}</h1>
+      <h1>{profile.name}</h1>
       <TodoManager />
     </div>
   );
 }
-
-function TodoManager() {
-  const { todos, addTodo, completedCount } = useTodos();
-  
-  return (
-    <div>
-      <p>Completed: {completedCount}/{todos.length}</p>
-      <AddTodoForm onAdd={addTodo} />
-      <TodoList todos={todos} />
-    </div>
-  );
-}
 ```
+
+<Note type="warning">
+Resolve stores through hooks, never by calling `useUserStore()` inside a
+component. A direct call bypasses the provider and reads the *ambient*
+container, so under a per-request container it would hand you a different store
+than the rest of the page. `useQuantaActions` is the zero-subscription way to
+get the store from the right container.
+</Note>
+
 
 ## Advanced Patterns
 
 ### 1. Form Handling
 
 ```javascript
-const formStore = createStore('form', {
+const useFormStore = defineStore('form', {
   state: () => ({
     fields: {
       name: '',
@@ -553,7 +561,7 @@ const formStore = createStore('form', {
 ### 2. Real-time Updates with WebSocket
 
 ```javascript
-const chatStore = createStore('chat', {
+const useChatStore = defineStore('chat', {
   state: () => ({
     messages: [],
     isConnected: false,
@@ -596,7 +604,7 @@ const chatStore = createStore('chat', {
 ### 3. Local Storage Synchronization
 
 ```javascript
-const settingsStore = createStore('settings', {
+const useSettingsStore = defineStore('settings', {
   state: () => ({
     theme: 'light',
     language: 'en',
@@ -638,7 +646,7 @@ const settingsStore = createStore('settings', {
 });
 
 // Initialize on app start
-settingsStore.initialize();
+useSettingsStore().initialize();
 ```
 
 ## Best Practices Summary

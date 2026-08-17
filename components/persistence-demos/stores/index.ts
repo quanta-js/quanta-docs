@@ -36,55 +36,54 @@ export const shoppingCartStore = createStore("shoppingCartStore", {
             price: number;
             quantity: number;
         }>,
-        total: 0,
     }),
     getters: {
         itemCount: (state) => state.items.length,
         isEmpty: (state) => state.items.length === 0,
+        // Derived, never stored. Keeping a `total` in state means every
+        // action that touches `items` has to remember to recompute it — and
+        // the one that forgets ships a cart whose total silently disagrees
+        // with its contents. A getter cannot drift.
+        total: (state) =>
+            state.items.reduce(
+                (sum, item) => sum + item.price * item.quantity,
+                0
+            ),
     },
     actions: {
         addItem(product: { id: number; name: string; price: number }) {
-            const existingItem = this.items.find(
-                (item) => item.id === product.id
-            );
-            if (existingItem) {
-                existingItem.quantity += 1;
+            const existing = this.items.find((item) => item.id === product.id);
+            if (existing) {
+                existing.quantity += 1;
             } else {
                 this.items.push({ ...product, quantity: 1 });
             }
-            this.updateTotal();
         },
         removeItem(productId: number) {
             this.items = this.items.filter((item) => item.id !== productId);
-            this.updateTotal();
         },
         updateQuantity(productId: number, quantity: number) {
-            const item = this.items.find((item) => item.id === productId);
-            if (item) {
-                item.quantity = Math.max(0, quantity);
-                if (item.quantity === 0) {
-                    this.removeItem(productId);
-                } else {
-                    this.updateTotal();
-                    this.items = [...this.items]; // Reassign for array reactivity
-                }
+            const item = this.items.find((it) => it.id === productId);
+            if (!item) return;
+
+            if (quantity <= 0) {
+                this.removeItem(productId);
+                return;
             }
-        },
-        updateTotal() {
-            this.total = this.items.reduce(
-                (sum, item) => sum + item.price * item.quantity,
-                0
-            );
+            // A plain in-place write. Reassigning the array to force an update
+            // used to be necessary and no longer is.
+            item.quantity = quantity;
         },
         clearCart() {
             this.items = [];
-            this.total = 0;
         },
     },
     persist: {
         adapter: new LocalStorageAdapter("shopping-cart"),
         debounceMs: 500,
-        include: ["items", "total"],
+        // Only `items` is persisted — `total` derives from it, so storing it
+        // would just be a second copy that can go stale.
+        include: ["items"],
     },
 });
 
@@ -248,14 +247,12 @@ export const appStateStore = createStore<AppState, AppGDefs, AppRawActions>(
                     priority: "medium",
                     completed: false,
                 });
-                this.tasks = [...this.tasks]; // Reassign for deep reactivity
             },
             toggleTask(id: number) {
                 const task = this.tasks.find((t) => t.id === id);
                 if (task) {
                     task.completed = !task.completed;
                     task.status = task.completed ? "done" : "in-progress";
-                    this.tasks = [...this.tasks]; // Trigger save
                 }
             },
             // Bonus: Update priority
@@ -263,7 +260,6 @@ export const appStateStore = createStore<AppState, AppGDefs, AppRawActions>(
                 const task = this.tasks.find((t) => t.id === id);
                 if (task) {
                     task.priority = priority as "low" | "medium" | "high";
-                    this.tasks = [...this.tasks];
                 }
             },
         },
