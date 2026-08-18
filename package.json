@@ -14,8 +14,8 @@
     "@docsearch/css": "^3.9.0",
     "@docsearch/react": "^3.9.0",
     "@gsap/react": "^2.1.2",
-    "@quantajs/core": "2.0.0-beta.9",
-    "@quantajs/react": "2.0.0-beta.9",
+    "@quantajs/core": "2.1.0",
+    "@quantajs/react": "2.1.0",
     "@radix-ui/react-accordion": "^1.2.0",
     "@radix-ui/react-avatar": "^1.1.0",
     "@radix-ui/react-collapsible": "^1.1.0",
@@ -52,6 +52,7 @@
     "unist-util-visit": "^5.0.0"
   },
   "devDependencies": {
+    "@quantajs/devtools": "^2.1.0",
     "@tailwindcss/typography": "^0.5.14",
     "@types/node": "^20",
     "@types/react": "^19",

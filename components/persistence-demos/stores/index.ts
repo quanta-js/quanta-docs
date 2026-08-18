@@ -95,7 +95,11 @@ export const formStore = createStore("formStore", {
         step: 1,
     }),
     actions: {
-        updateField(field: keyof typeof this, value: string | number) {
+        // Same circularity trap as `appStateStore.updateFilters` below:
+        // `keyof typeof this` in a parameter position makes TypeScript give
+        // up on the whole actions object, so none of these actions would
+        // appear on the store's type.
+        updateField(field: string, value: string | number) {
             (this as any)[field] = value;
         },
         nextStep() {
@@ -130,15 +134,20 @@ export const formStore = createStore("formStore", {
 });
 
 // Types (new block)
-interface Task {
+//
+// These are `type` aliases rather than `interface`s on purpose: a store's
+// state has to satisfy `StateTree`, and TypeScript gives type aliases an
+// implicit index signature while interfaces get none. An `interface` here
+// silently collapses the inferred state to `unknown` at every read site.
+type Task = {
     id: number;
     title: string;
     status: "pending" | "in-progress" | "done";
     priority: "low" | "medium" | "high";
     completed: boolean;
-}
+};
 
-interface AppState {
+type AppState = {
     currentView: "list" | "board" | "calendar";
     filters: {
         status: "all" | "pending" | "in-progress" | "done";
@@ -153,26 +162,17 @@ interface AppState {
         user: string;
     };
     tasks: Task[];
-}
-
-type AppGDefs = {
-    filteredTasks: (state: AppState) => Task[];
 };
 
-type AppRawActions = {
-    setView: (view: "list" | "board" | "calendar") => void;
-    updateFilters: (updates: Partial<AppState["filters"]>) => void;
-    setPage: (page: number) => void;
-    toggleSidebar: () => void;
-    addTask: (title: string) => void;
-    toggleTask: (id: number) => void;
-    updateTaskPriority: (id: number, priority: string) => void;
-};
-
-export const appStateStore = createStore<AppState, AppGDefs, AppRawActions>(
+// Note: no explicit generics on `createStore`. Supplying `S` pins `G` and
+// `A` at their defaults, so the getters and actions below would vanish from
+// the resulting type — and an `interface` fails the `StateTree` constraint
+// outright, since interfaces get no implicit index signature. Annotating the
+// state factory gives the same checking with nothing lost.
+export const appStateStore = createStore(
     "appStateStore",
     {
-        state: () => ({
+        state: (): AppState => ({
             currentView: "list" as "list" | "board" | "calendar",
             filters: {
                 status: "all" as "all" | "pending" | "in-progress" | "done",
@@ -228,7 +228,12 @@ export const appStateStore = createStore<AppState, AppGDefs, AppRawActions>(
             setView(view: "list" | "board" | "calendar") {
                 this.currentView = view;
             },
-            updateFilters(updates: Partial<typeof this.filters>) {
+            // `Partial<AppState["filters"]>`, not `Partial<typeof this.filters>`:
+            // referring to `this` in a *parameter* position of a contextually
+            // typed action is circular, and TypeScript resolves it by giving
+            // up on the whole actions object — every action then disappears
+            // from the store's type.
+            updateFilters(updates: Partial<AppState["filters"]>) {
                 this.filters = { ...this.filters, ...updates };
                 this.pagination.page = 1; // Reset pagination
             },
