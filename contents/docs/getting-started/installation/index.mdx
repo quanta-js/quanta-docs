@@ -115,7 +115,8 @@ For React applications, use the `QuantaDevTools` component in place of
 `mountDevTools`:
 
 ```javascript
-import { QuantaDevTools, enableDevTools } from '@quantajs/react';
+import { enableDevTools } from '@quantajs/react';
+import { QuantaDevTools } from '@quantajs/react/devtools';
 
 if (process.env.NODE_ENV === 'development') {
   enableDevTools();

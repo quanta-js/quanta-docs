@@ -31,7 +31,7 @@ DevTools is split in two, and you need both:
 | Piece | From | Does |
 |---|---|---|
 | The **bridge** | `enableDevTools()` in `@quantajs/core` | Collects store state and action calls. **Off by default.** |
-| The **UI** | `mountDevTools()` in `@quantajs/devtools`, or `<QuantaDevTools />` in `@quantajs/react` | Renders the panel. |
+| The **UI** | `mountDevTools()` in `@quantajs/devtools`, or `<QuantaDevTools />` in `@quantajs/react/devtools` | Renders the panel. |
 
 Mount the UI without enabling the bridge and the panel appears empty — that is
 the symptom to recognise.
@@ -173,10 +173,12 @@ The action log keeps track of the last 100 actions, giving you a comprehensive v
 
 ## React Integration
 
-If you're using React, you can use the `QuantaDevTools` component from `@quantajs/react`:
+If you're using React, you can use the `QuantaDevTools` component from
+`@quantajs/react/devtools`:
 
 ```tsx
-import { QuantaDevTools, enableDevTools } from '@quantajs/react';
+import { enableDevTools } from '@quantajs/react';
+import { QuantaDevTools } from '@quantajs/react/devtools';
 
 if (process.env.NODE_ENV === 'development') {
   enableDevTools();
@@ -196,6 +198,15 @@ The component handles mounting and unmounting for you. `@quantajs/devtools` is
 an optional peer dependency loaded through a dynamic import, so it stays out of
 your production bundle — which is why `@quantajs/react` is 2.8 kB gzipped
 rather than the 20.1 kB it was in 2.0.0.
+
+<Note type="warning" title="It moved in 2.1.1">
+In 2.1.0 this component was exported from `@quantajs/react` itself. Because it
+dynamically imports `@quantajs/devtools` — a specifier bundlers resolve at build
+time — that broke the build of every application which had not installed that
+optional peer, whether or not it used DevTools at all. Importing from the
+`/devtools` subpath is what confines the requirement to the apps that want the
+panel. The old import still compiles but renders nothing and logs a warning.
+</Note>
 
 In the Next.js App Router, put this in a file marked `'use client'`.
 
