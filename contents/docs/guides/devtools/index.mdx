@@ -78,9 +78,9 @@ mountDevTools();
 A floating button appears in the bottom-right corner. Click it to open the
 panel.
 
-Enable the bridge as early as possible — ideally at your app's entry point,
-before any store is created. It picks up stores created afterwards; stores
-created before it is enabled may not be registered.
+Enable the bridge at your app's entry point. Stores created before it is
+enabled are picked up too, so it also works when `<QuantaDevTools>` turns it on
+after the first render.
 
 ### Redacting sensitive values
 
@@ -93,8 +93,9 @@ enableDevTools({
 });
 ```
 
-Paths are matched against state values and against action arguments that are
-objects carrying a matching key. Matches are replaced with `[redacted]`.
+Paths are matched against the state and getter values the panel shows, keys
+nested inside a changed value, and action arguments that are objects carrying a
+matching key. Matches are replaced with `[redacted]`.
 
 ### Turning it back off
 
@@ -418,11 +419,10 @@ collects nothing, so there is nothing to show.
 
 ### Some stores are missing
 
-1. **`enableDevTools()` ran too late.** It picks up stores created after it is
-   enabled. Move it to your entry point, before any store is created.
-2. **The store is in a different container.** A store in a per-request or
-   `useLocalStore` container has its own lifetime and may already be disposed.
-3. **Duplicate names.** Two stores sharing a name in one container are one
+1. **The store is in a different container.** A store in a per-request or
+   `useLocalStore` container has its own lifetime and may already be disposed;
+   destroyed stores are removed from the panel.
+2. **Duplicate names.** Two stores sharing a name in one container are one
    store — the second resolution returns the first.
 
 ### Actions not logging
