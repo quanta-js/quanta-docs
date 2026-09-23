@@ -106,15 +106,22 @@ const READOUTS = [
     { name: "step", selector: (s: DemoState) => s.step, source: "s => s.step", minChars: 1 },
 ];
 
-interface LogEntry {
+export interface RunEntry {
+    /** The action that ran, such as `increment()`. */
     action: string;
+    /** The readouts it re-rendered. */
     updated: string[];
 }
 
-function Instrument() {
+interface InstrumentProps {
+    /** Called after each action, once its re-renders have committed. */
+    onRun?: (entry: RunEntry) => void;
+}
+
+function Instrument({ onRun }: InstrumentProps) {
     const demo = useQuantaActions(useDemo);
     const updated = useRef<string[]>([]);
-    const [log, setLog] = useState<LogEntry | null>(null);
+    const [log, setLog] = useState<RunEntry | null>(null);
 
     const onUpdate = useCallback((name: string) => {
         updated.current.push(name);
@@ -124,9 +131,11 @@ function Instrument() {
     const run = (action: string, fn: () => void) => {
         updated.current = [];
         fn();
-        requestAnimationFrame(() =>
-            setLog({ action, updated: [...updated.current] }),
-        );
+        requestAnimationFrame(() => {
+            const entry = { action, updated: [...updated.current] };
+            setLog(entry);
+            onRun?.(entry);
+        });
     };
 
     const untouched = log
@@ -189,13 +198,13 @@ function Instrument() {
     );
 }
 
-/** The hero's interactive panel, in its own store container. */
-export default function LiveInstrument() {
+/** The landing page's interactive panel, in its own store container. */
+export default function LiveInstrument({ onRun }: InstrumentProps) {
     // One container per mount, created once and never disposed early.
     const [container] = useState(() => createContainer("landing"));
     return (
         <QuantaProvider container={container}>
-            <Instrument />
+            <Instrument onRun={onRun} />
         </QuantaProvider>
     );
 }
