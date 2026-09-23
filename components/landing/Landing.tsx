@@ -18,23 +18,21 @@ import {
 } from "./snippets";
 import styles from "./landing.module.css";
 
-const INSTALL = "npm install @quantajs/core @quantajs/react";
-
-function InstallCommand() {
+function InstallCommand({ command = "npm install @quantajs/core" }: { command?: string }) {
     const [copied, setCopied] = useState(false);
     return (
         <button
             type="button"
             className={`${styles.link} group inline-flex max-w-full items-center gap-3 rounded-lg border border-[var(--line)] bg-black/40 px-4 py-2.5 font-code text-[0.8rem] text-[var(--dim)] backdrop-blur-sm transition-colors hover:border-[var(--line-strong)]`}
             onClick={() =>
-                navigator.clipboard.writeText(INSTALL).then(() => {
+                navigator.clipboard.writeText(command).then(() => {
                     setCopied(true);
                     setTimeout(() => setCopied(false), 1600);
                 })
             }
         >
             <span className="text-[var(--teal)]">$</span>
-            <span className="truncate text-[var(--text)]">{INSTALL}</span>
+            <span className="truncate text-[var(--text)]">{command}</span>
             {copied ? (
                 <Check aria-label="Copied" className="h-4 w-4 shrink-0 text-[var(--teal)]" />
             ) : (
@@ -193,8 +191,8 @@ export default function Landing() {
                         <p className="max-w-[32rem] text-lg leading-relaxed text-[var(--dim)]">
                             Write a value and only the code that read it runs — once. Typed
                             stores, async action state, request-scoped containers and
-                            persistence, for React or plain TypeScript, with no runtime
-                            dependencies.
+                            persistence in a framework-free core, with official React
+                            bindings and no runtime dependencies.
                         </p>
                         <div className="flex flex-wrap gap-3">
                             <Link href="/docs/getting-started/quick-start-guide" className={primary}>
@@ -222,12 +220,13 @@ export default function Landing() {
                             Press a button. See what re-renders.
                         </h2>
                         <p className="leading-relaxed text-[var(--dim)]">
-                            Each readout is a component reading one value with{" "}
-                            <code className="font-code text-[0.9em] text-[var(--text)]">useQuantaValue</code>.
-                            The store on the right is the one running it: the action you press
-                            lights up, and so does the code that re-ran because it read a value
-                            that changed. Nothing else runs.
+                            Each readout is a React component reading one value with{" "}
+                            <code className="font-code text-[0.9em] text-[var(--text)]">useQuantaValue</code>{" "}
+                            from the React bindings. The store on the right is the one running
+                            it: the action you press lights up, and so does the code that re-ran
+                            because it read a value that changed. Nothing else runs.
                         </p>
+                        <InstallCommand command="npm install @quantajs/core @quantajs/react" />
                     </div>
                     <div className="mt-12 grid gap-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-start">
                         <LiveInstrument
