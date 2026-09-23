@@ -1,5 +1,26 @@
 /** Code shown on the landing page. Keep in step with the current API. */
 
+/** 1-based number of the first line of `code` that contains `text`. */
+export function lineOf(code: string, text: string): number {
+    return code.split("\n").findIndex((line) => line.includes(text)) + 1;
+}
+
+/**
+ * 1-based numbers of the lines in the block that opens on the line containing
+ * `head`, through its closing brace.
+ */
+export function blockOf(code: string, head: string): number[] {
+    const lines = code.split("\n");
+    const start = lines.findIndex((line) => line.includes(head));
+    if (start < 0) return [];
+    const indent = lines[start].search(/\S/);
+    const end = lines.findIndex(
+        (line, i) => i > start && line.search(/\S/) === indent && line.trim().startsWith("}"),
+    );
+    const last = end < 0 ? start : end;
+    return Array.from({ length: last - start + 1 }, (_, i) => start + i + 1);
+}
+
 /** The store behind the hero instrument, as it runs. */
 export const INSTRUMENT_CODE = `import { defineStore } from '@quantajs/core';
 import { useQuantaValue, useQuantaActions } from '@quantajs/react';
@@ -36,17 +57,20 @@ export const ASYNC_CODE = `const useUser = defineStore('user', {
   state: () => ({ name: '' }),
   actions: {
     async load(id: string) {
-      const res = await fetch(\`/api/users/\${id}\`, { signal: this.$signal });
+      const res = await fetch(\`/api/users/\${id}\`, {
+        signal: this.$signal,
+      });
       this.name = (await res.json()).name;
     },
   },
 });
 
+const user = useUser();
 user.load.pending; // true while the request is in flight
 user.load.error;   // the rejection, or null
 user.load.abort(); // cancels it through $signal`;
 
-export const CONTAINER_CODE = `// app/page.tsx — one container per request
+export const CONTAINER_CODE = `// one container per request
 export default async function Page() {
   const container = createContainer();
   await useCart(container).load();
@@ -54,7 +78,11 @@ export default async function Page() {
   const snapshot = container.dehydrate();
   container.dispose();
 
-  return <Providers snapshot={snapshot}><Cart /></Providers>;
+  return (
+    <Providers snapshot={snapshot}>
+      <Cart />
+    </Providers>
+  );
 }`;
 
 export const PERSIST_CODE = `const usePrefs = defineStore('prefs', {
@@ -64,7 +92,10 @@ export const PERSIST_CODE = `const usePrefs = defineStore('prefs', {
     include: ['theme'],
     version: 2,
     migrations: {
-      2: (data) => ({ ...data, theme: data.dark ? 'dark' : 'light' }),
+      2: (data) => ({
+        ...data,
+        theme: data.dark ? 'dark' : 'light',
+      }),
     },
   },
 });`;
