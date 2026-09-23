@@ -4,7 +4,7 @@ import HomeWrapper from "@/components/landing/homeWrapper";
 export const metadata: Metadata = {
   title: "QuantaJS — Reactive state for JavaScript",
   description:
-    "Reactive stores for React and plain TypeScript: fine-grained updates, async action state, request-scoped containers and persistence, with no runtime dependencies.",
+    "Reactive stores with a framework-free core and official React bindings: fine-grained updates, async action state, request-scoped containers and persistence, with no runtime dependencies.",
 };
 
 export default function Home() {
