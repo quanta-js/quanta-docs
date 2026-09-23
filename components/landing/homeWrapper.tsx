@@ -2,8 +2,7 @@
 
 import { useLayoutEffect, useRef, useEffect } from "react";
 import { useTheme } from "next-themes";
-import Overlay from "./Overlay";
-import SceneWrapper from "./SceneWrapper";
+import Landing from "./Landing";
 
 export default function HomeWrapper() {
     const { resolvedTheme } = useTheme();
@@ -22,7 +21,7 @@ export default function HomeWrapper() {
         // Force layout-level checks to ensure body behind the "sm:container" is black
         // preventing white bars on the sides in Light Mode.
         const originalBodyBg = document.body.style.backgroundColor;
-        document.body.style.backgroundColor = "#000000"; // Hard black
+        document.body.style.backgroundColor = "#0a0d0e"; // matches the landing ground
 
         return () => {
             // Cleanup: Only remove forced dark mode if the user's PREFERRED theme is NOT dark.
@@ -35,9 +34,8 @@ export default function HomeWrapper() {
         };
     }, []);
     return (
-        <main className="flex min-h-screen flex-col items-center justify-between text-white relative">
-            <SceneWrapper />
-            <Overlay />
+        <main className="relative flex min-h-screen flex-col items-center">
+            <Landing />
         </main>
     );
-}   
+}
