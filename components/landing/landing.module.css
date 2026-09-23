@@ -1,0 +1,171 @@
+/*
+ * The landing page is dark by design; every colour it uses is set here or in
+ * Landing.tsx, so it renders the same whatever theme the rest of the site is
+ * in. Palette taken from the QuantaJS mark: unlit cells are #999 at 20%, lit
+ * cells are teal #38B2AC, grey #848484 or white.
+ */
+
+.page {
+    --ground: #0a0d0e;
+    --panel: #0f1415;
+    --panel-2: #131a1b;
+    --line: rgba(255, 255, 255, 0.08);
+    --line-strong: rgba(255, 255, 255, 0.14);
+    --text: #e6edec;
+    --dim: #8b9796;
+    --faint: #5f6b6a;
+    --teal: #38b2ac;
+    --teal-soft: rgba(56, 178, 172, 0.14);
+    --cell-off: rgba(153, 153, 153, 0.16);
+
+    background: var(--ground);
+    color: var(--text);
+}
+
+/* A faint field of dots, fading out towards the edges. */
+.field {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: radial-gradient(
+        rgba(153, 153, 153, 0.22) 1px,
+        transparent 1.2px
+    );
+    background-size: 22px 22px;
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 30%, transparent 75%);
+}
+
+/* ---------- dot matrix ---------- */
+
+.matrix {
+    display: grid;
+    gap: calc(var(--cell) * 0.38);
+}
+
+.cell {
+    width: var(--cell);
+    height: var(--cell);
+    border-radius: 26%;
+    background: var(--cell-off);
+    transition:
+        border-radius 280ms ease,
+        background-color 280ms ease,
+        box-shadow 280ms ease;
+}
+
+.matrix[data-tone="teal"] .cell[data-on] {
+    border-radius: 50%;
+    background: var(--teal);
+    box-shadow: 0 0 calc(var(--cell) * 0.9) rgba(56, 178, 172, 0.45);
+}
+
+.matrix[data-tone="white"] .cell[data-on] {
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 calc(var(--cell) * 0.8) rgba(255, 255, 255, 0.25);
+}
+
+/* ---------- instrument ---------- */
+
+.panel {
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border: 1px solid var(--line-strong);
+    border-radius: 14px;
+    box-shadow:
+        0 30px 80px -30px rgba(0, 0, 0, 0.8),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.readout {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.25);
+    transition: border-color 500ms ease;
+}
+
+.readout[data-pulse] {
+    animation: pulse 650ms ease-out;
+}
+
+@keyframes pulse {
+    0% {
+        border-color: var(--teal);
+        box-shadow: 0 0 0 1px var(--teal), 0 0 24px -4px rgba(56, 178, 172, 0.5);
+    }
+    100% {
+        border-color: var(--line);
+        box-shadow: 0 0 0 0 transparent;
+    }
+}
+
+.control {
+    font-family: var(--font-geist-mono);
+    font-size: 0.8rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    padding: 0.55rem 0.8rem;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.03);
+    transition:
+        background-color 150ms ease,
+        border-color 150ms ease;
+}
+
+.control:hover {
+    background: var(--teal-soft);
+    border-color: rgba(56, 178, 172, 0.5);
+}
+
+.control:focus-visible,
+.link:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+}
+
+/* ---------- code ---------- */
+
+.code {
+    font-family: var(--font-geist-mono);
+    font-size: 0.8rem;
+    line-height: 1.7;
+    color: #c9d4d3;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 1rem 1.1rem;
+    overflow-x: auto;
+    white-space: pre;
+}
+
+.code > code {
+    /* The site's MDX styles make `pre > code` a grid, one row per child. */
+    display: block;
+}
+
+.kw {
+    color: var(--teal);
+}
+
+.str {
+    color: #a8d8c9;
+}
+
+.cmt {
+    color: var(--faint);
+}
+
+.num {
+    color: #e5c07b;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cell,
+    .readout,
+    .control {
+        transition: none;
+    }
+
+    .readout[data-pulse] {
+        animation: none;
+    }
+}
