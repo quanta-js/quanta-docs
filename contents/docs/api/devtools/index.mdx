@@ -28,8 +28,9 @@ interface DevToolsOptions {
 }
 ```
 
-Redaction applies to state values and to action arguments that are objects
-carrying a matching key. Matches become `[redacted]`.
+Redaction applies to the state and getter values the panel shows, to keys
+nested inside a changed value, and to action arguments that are objects carrying
+a matching key. Matches become `[redacted]`.
 
 ```ts
 if (process.env.NODE_ENV === 'development') {
@@ -46,8 +47,7 @@ not statically replaced — true for CDN bundles, Deno and plain
 it out of production builds.
 </Note>
 
-Enable it before creating stores. It registers stores created after it is
-enabled.
+Stores created before it is enabled are registered too.
 
 ## `disableDevTools()`
 
@@ -60,7 +60,9 @@ Detaches the bridge and stops collecting.
 ## `devtools`
 
 The bridge object itself, for building a custom DevTools UI. `devtools.enabled`
-reports whether collection is on. Most applications never touch this.
+reports whether collection is on, and `devtools.snapshot(name)` returns a plain
+copy of a store's state and getter values with `redact` applied — render that,
+not the live store. Most applications never touch this.
 
 ## `@quantajs/devtools` exports
 

@@ -89,18 +89,23 @@ Everything a store exposes beyond your own state, getters and actions:
 | `$dehydrate()` | Serialisable snapshot of this store's state. |
 | `$hydrate(snapshot)` | Apply a snapshot to this store. |
 | `$destroy()` | Release effects, watchers and persistence; remove from the container. |
+| `toJSON()` | Lets `JSON.stringify(store)` serialise the state. |
 | `subscribe(fn)` | Coarse change notification. Returns an unsubscribe function. |
 | `state` | The underlying reactive state object. |
 
 ### `subscribe`
 
 ```ts
-const unsubscribe = counter.subscribe((snapshot) => {
-  console.log('changed:', snapshot);
+const unsubscribe = counter.subscribe((state) => {
+  console.log('changed:', state.count);
 });
 
 unsubscribe();
 ```
+
+The callback receives the store's reactive state. If it throws, the other
+subscribers still run and the error is rethrown to the code that made the
+change.
 
 `subscribe` is coarse by design — it fires on "something changed", not on a
 specific key. It also fires when an action's `pending` or `error` flips, so a
