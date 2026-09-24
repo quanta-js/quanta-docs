@@ -1,0 +1,164 @@
+---
+title: Vue Integration
+description: Composables and a plugin for using QuantaJS stores in Vue 3 and Nuxt.
+---
+
+# Vue Integration
+
+`@quantajs/vue` provides composables on top of `@quantajs/core` for Vue 3.3 and later, with server rendering support. The stores themselves are ordinary QuantaJS stores: the same definition works in React, Svelte or plain TypeScript.
+
+## Installation
+
+```bash
+npm install @quantajs/vue @quantajs/core
+# or
+pnpm add @quantajs/vue @quantajs/core
+# or
+yarn add @quantajs/vue @quantajs/core
+```
+
+## The shortest version
+
+```ts
+// stores/cart.ts
+import { defineStore } from '@quantajs/core';
+
+export const useCartStore = defineStore('cart', {
+  state: () => ({ items: [] as { name: string; price: number }[] }),
+  getters: { total: (s) => s.items.reduce((n, i) => n + i.price, 0) },
+  actions: {
+    add(name: string, price: number) {
+      this.items.push({ name, price });
+    },
+  },
+});
+```
+
+```html
+<!-- Cart.vue -->
+<script setup lang="ts">
+import { useQuantaActions, useQuantaValue } from '@quantajs/vue';
+import { useCartStore } from './stores/cart';
+
+const total = useQuantaValue(useCartStore, (s) => s.total);
+const cart = useQuantaActions(useCartStore);
+</script>
+
+<template>
+  <p>Total: {{ total }}</p>
+  <button @click="cart.add('Tea', 4)">Add tea</button>
+</template>
+```
+
+No plugin is needed in a client-only app: stores resolve against the default container.
+
+## Choosing a composable
+
+| Composable | Updates on | Use for |
+|---|---|---|
+| `useQuantaValue(definition, selector, options?)` | What the selector reads | Most components; returns a read-only ref |
+| `useQuanta(definition)` | Any change to the store | Small stores, or components that read most of it |
+| `useQuantaActions(definition)` | Nothing | Components that only call actions |
+| `useLocalStore(definition)` | Any change to the store | A store owned by one component, disposed on unmount |
+
+Call them in `setup()` or `<script setup>`. Subscriptions end when the component unmounts.
+
+### `useQuantaValue(definition, selector, options?)`
+
+Returns a read-only ref to what the selector reads. The selector runs inside QuantaJS's own tracking, so the ref updates when state the selector read changes, including an array or object mutated in place, and not otherwise.
+
+A selector that builds a new object on each run should pass `shallow`, so an unchanged projection does not update:
+
+```ts
+import { shallow, useQuantaValue } from '@quantajs/vue';
+
+const summary = useQuantaValue(
+  useCartStore,
+  (s) => ({ count: s.items.length, total: s.total }),
+  { equalityFn: shallow },
+);
+```
+
+### `useQuanta(definition)`
+
+Returns the store. Reading any of its properties in a component makes that component re-render on any change to the store:
+
+```html
+<script setup lang="ts">
+import { useQuanta } from '@quantajs/vue';
+import { useCartStore } from './stores/cart';
+
+const cart = useQuanta(useCartStore);
+</script>
+
+<template>
+  <li v-for="item in cart.items" :key="item.name">{{ item.name }}</li>
+</template>
+```
+
+### `useLocalStore(definition)`
+
+Each component instance gets its own store, in a container disposed when the component unmounts. Useful for a wizard or form whose state should not outlive it.
+
+<Note title="Two reactivity systems">
+QuantaJS stores have their own reactivity, separate from Vue's. Read them through these composables rather than wrapping them in `ref()` or `reactive()`; the stores are marked so Vue never proxies them. `@quantajs/vue` does not re-export core's `reactive`, `computed` or `watch`, because Vue has functions with the same names.
+</Note>
+
+## Server rendering
+
+`createQuanta()` is an app plugin that gives the app its own container. On the server, create the app per request, so each request gets its own:
+
+```ts
+// entry-server.ts
+import { createSSRApp } from 'vue';
+import { renderToString } from 'vue/server-renderer';
+import { createQuanta } from '@quantajs/vue';
+import App from './App.vue';
+
+export async function render() {
+  const app = createSSRApp(App);
+  const quanta = createQuanta();
+  app.use(quanta);
+
+  const html = await renderToString(app);
+  return { html, snapshot: quanta.container.dehydrate() };
+}
+```
+
+On the client, pass the snapshot to `createQuanta`. It is applied before the first render, so the client's markup matches the server's:
+
+```ts
+// entry-client.ts
+import { createSSRApp } from 'vue';
+import { createQuanta } from '@quantajs/vue';
+import App from './App.vue';
+
+const app = createSSRApp(App);
+app.use(createQuanta({ snapshot: window.__QUANTA__ }));
+app.mount('#app');
+```
+
+Nothing subscribes during server rendering. Never resolve stores against the default container on the server: it is shared by every request. A container created by `createQuanta()` is disposed when the app unmounts; pass `{ container }` to manage one yourself. `provideQuantaContainer(container)` scopes a component subtree to a different container.
+
+## DevTools
+
+```bash
+npm install -D @quantajs/devtools
+```
+
+```ts
+import { enableDevTools } from '@quantajs/vue';
+
+if (import.meta.env.DEV) {
+  enableDevTools({ redact: ['token'] });
+  import('@quantajs/devtools').then(({ mountDevTools }) => mountDevTools());
+}
+```
+
+See [DevTools](/docs/guides/devtools) for what the panel shows.
+
+## Learn More
+
+- [defineStore](/docs/api/define-store)
+- [Containers](/docs/api/containers)
+- [Server-Side Rendering](/docs/guides/ssr)

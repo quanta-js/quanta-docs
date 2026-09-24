@@ -1,0 +1,155 @@
+---
+title: Svelte Integration
+description: QuantaJS stores as Svelte stores, for Svelte 4, Svelte 5 and SvelteKit.
+---
+
+# Svelte Integration
+
+`@quantajs/svelte` turns QuantaJS stores into standard Svelte stores, so `$` subscriptions work in Svelte 4 and 5 and in SvelteKit. The stores themselves are ordinary QuantaJS stores: the same definition works in React, Vue or plain TypeScript.
+
+## Installation
+
+```bash
+npm install @quantajs/svelte @quantajs/core
+# or
+pnpm add @quantajs/svelte @quantajs/core
+# or
+yarn add @quantajs/svelte @quantajs/core
+```
+
+## The shortest version
+
+```ts
+// src/lib/stores/cart.ts
+import { defineStore } from '@quantajs/core';
+
+export const useCartStore = defineStore('cart', {
+  state: () => ({ items: [] as { name: string; price: number }[] }),
+  getters: { total: (s) => s.items.reduce((n, i) => n + i.price, 0) },
+  actions: {
+    add(name: string, price: number) {
+      this.items.push({ name, price });
+    },
+  },
+});
+```
+
+```html
+<!-- Cart.svelte -->
+<script lang="ts">
+  import { useQuantaActions, useQuantaValue } from '@quantajs/svelte';
+  import { useCartStore } from '$lib/stores/cart';
+
+  const total = useQuantaValue(useCartStore, (s) => s.total);
+  const cart = useQuantaActions(useCartStore);
+</script>
+
+<p>Total: {$total}</p>
+<button onclick={() => cart.add('Tea', 4)}>Add tea</button>
+```
+
+No setup is needed in a client-only app: stores resolve against the default container.
+
+## Choosing a function
+
+| Function | Notifies on | Use for |
+|---|---|---|
+| `useQuantaValue(definition, selector, options?)` | What the selector reads | Most components |
+| `useQuanta(definition)` | Any change to the store | Small stores, or components that read most of it |
+| `useQuantaActions(definition)` | Nothing | Components that only call actions; returns the store itself |
+| `useLocalStore(definition)` | Any change to the store | A store owned by one component, disposed with it |
+
+Each returns a standard Svelte store. In a component, `$` subscribes and unsubscribes for you. In a `.svelte.ts` file, `fromStore` from `svelte/store` turns one into state. A store tracks QuantaJS state only while something is subscribed, so it can also be created at module level.
+
+### `useQuantaValue(definition, selector, options?)`
+
+The selector runs inside QuantaJS's own tracking, so subscribers are notified when state the selector read changes, including an array or object mutated in place, and not otherwise. A selector that builds a new object on each run should pass `shallow`:
+
+```ts
+import { shallow, useQuantaValue } from '@quantajs/svelte';
+import { useCartStore } from '$lib/stores/cart';
+
+export const summary = useQuantaValue(
+  useCartStore,
+  (s) => ({ count: s.items.length, total: s.total }),
+  { equalityFn: shallow },
+);
+```
+
+### `useQuanta(definition)`
+
+A Svelte store holding the store itself, notifying on any change to it:
+
+```html
+<script lang="ts">
+  import { useQuanta } from '@quantajs/svelte';
+  import { useCartStore } from '$lib/stores/cart';
+
+  const cart = useQuanta(useCartStore);
+</script>
+
+{#each $cart.items as item}
+  <li>{item.name}</li>
+{/each}
+```
+
+### `useLocalStore(definition)`
+
+Each component instance gets its own store, in a container disposed when the component is destroyed. Call it while the component initialises.
+
+## SvelteKit and server rendering
+
+Call `setQuantaContainer()` in the root layout. On the server the layout renders once per request, so each request gets its own container, disposed when the layout is destroyed:
+
+```html
+<!-- src/routes/+layout.svelte -->
+<script lang="ts">
+  import { setQuantaContainer } from '@quantajs/svelte';
+
+  let { data, children } = $props();
+  setQuantaContainer(undefined, { snapshot: data.snapshot });
+</script>
+
+{@render children()}
+```
+
+To load state on the server, resolve stores against a container in a `load` function and return its snapshot. The layout applies it before anything renders, so the client's markup matches the server's:
+
+```ts
+// src/routes/+layout.server.ts
+import { createContainer } from '@quantajs/core';
+import { useCartStore } from '$lib/stores/cart';
+
+export async function load() {
+  const container = createContainer();
+  useCartStore(container).add('Loaded on the server', 0);
+  const snapshot = container.dehydrate();
+  container.dispose();
+  return { snapshot };
+}
+```
+
+Never resolve stores against the default container on the server: it is shared by every request. Pass your own container to `setQuantaContainer(container)` to manage its lifetime yourself; `getQuantaContainer()` returns the container in context.
+
+## DevTools
+
+```bash
+npm install -D @quantajs/devtools
+```
+
+```ts
+import { enableDevTools } from '@quantajs/svelte';
+
+if (import.meta.env.DEV) {
+  enableDevTools({ redact: ['token'] });
+  import('@quantajs/devtools').then(({ mountDevTools }) => mountDevTools());
+}
+```
+
+See [DevTools](/docs/guides/devtools) for what the panel shows.
+
+## Learn More
+
+- [defineStore](/docs/api/define-store)
+- [Containers](/docs/api/containers)
+- [Server-Side Rendering](/docs/guides/ssr)

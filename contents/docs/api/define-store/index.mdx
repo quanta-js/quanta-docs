@@ -235,7 +235,9 @@ const cart = createStore('cart', options, container);
 
 See [createStore](/docs/api/create-store).
 
-## Migrating from 2.0
+## Migrating from `useStore`
+
+`useStore(name)` and `hasStore(name)` were removed in 3.0. Call the definition instead, and use [`container.get(name)`](/docs/api/containers) for the rare lookup by name.
 
 ```diff
 - import { createStore, useStore } from '@quantajs/core';
@@ -255,4 +257,4 @@ plain function, not a React hook, and it is callable outside components.
 - [Async Actions](/docs/guides/async-actions) — `pending`, `error`, `abort()`
 - [Server-Side Rendering](/docs/guides/ssr) — dehydrate and hydrate
 - [React Integration](/docs/integration/react-integration)
-- [Migrating to 2.1](/docs/getting-started/migration)
+- [Migrating to 3.0](/docs/getting-started/migration)

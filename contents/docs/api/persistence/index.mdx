@@ -19,39 +19,59 @@ QuantaJS persistence automatically saves and rehydrates store state with adapter
 
 ```ts
 import {
-  createPersistenceManager,
   LocalStorageAdapter,
   SessionStorageAdapter,
   IndexedDBAdapter,
-  MigrationManager,
-  createMigrationManager,
-  CommonMigrations,
+  type PersistenceConfig,
+  type PersistenceAdapter,
+  type PersistedData,
+  type StoredState,
 } from '@quantajs/core';
 ```
 
-## `PersistenceConfig<T>`
+A store creates its persistence manager from the `persist` option; there is no separate factory.
+
+## `PersistenceConfig<S>`
+
+`S` is the store's state, so `include`, `exclude` and `transform.out` are checked against it.
 
 ```ts
-interface PersistenceConfig<T = any> {
+interface PersistenceConfig<S> {
   adapter: PersistenceAdapter;
-  serialize?: (data: any) => string;
-  deserialize?: (data: string) => any;
-  migrations?: Record<number, (data: any) => any>;
-  version?: number;
-  debounceMs?: number;
-  include?: Array<keyof T>;
-  exclude?: Array<keyof T>;
+  include?: ReadonlyArray<keyof S & string>;  // default: the whole state
+  exclude?: ReadonlyArray<keyof S & string>;
+  version?: number;                           // default: 1
+  migrations?: Record<number, (data: StoredState) => StoredState>;
   transform?: {
-    in?: (data: any) => any;
-    out?: (data: any) => any;
+    out?: (slice: Partial<S>) => StoredState; // before writing
+    in?: (data: StoredState) => StoredState;  // after migrations, when loading
   };
-  onError?: (
-    error: Error,
-    operation: 'read' | 'write' | 'remove' | 'watch-setup'
-  ) => void;
-  validator?: (data: any) => boolean;
+  validator?: (data: StoredState) => boolean;
+  serialize?: (payload: PersistedData) => string; // default: JSON.stringify
+  deserialize?: (raw: string) => unknown;         // default: a JSON parse that drops __proto__
+  debounceMs?: number;                            // default: 300
+  onError?: (error: Error, operation: 'read' | 'write' | 'remove' | 'watch-setup') => void;
+}
+
+// Data as stored. Values are unknown until your validator has checked them.
+type StoredState = Record<string, unknown>;
+
+// The envelope `serialize` encodes and the adapter stores.
+interface PersistedData<D = StoredState> {
+  data: D;
+  version: number;
+  timestamp: number;
+  storeName: string;
 }
 ```
+
+### Saving and loading, step by step
+
+**Save:** pick the `include` / `exclude` keys → `validator` → `transform.out` → wrap in `PersistedData` → `serialize` → `adapter.write`.
+
+**Load:** `adapter.read` → `deserialize` → refuse data from a newer `version` → strip prototype-pollution keys → `migrations` for each version in between → `transform.in` → keep only `include` / `exclude` keys → `validator` → apply to state.
+
+The validator sees state-shaped data both ways: the slice before `transform.out` when saving, and the result of `transform.in` when loading. Only persisted keys are loaded, so removing a key from `include` stops its stored value from coming back.
 
 ## Adapter Classes
 
@@ -82,6 +102,23 @@ const adapter = new IndexedDBAdapter('store-key', 'app-db', 'stores', 1);
 - Async persistence for larger datasets
 - Better fit for high-volume/local-first workloads
 
+### Custom adapters
+
+An adapter stores the string `serialize` produced:
+
+```ts
+interface PersistenceAdapter {
+  readonly key: string;
+  read(): string | null | Promise<string | null>;
+  write(data: string): void | Promise<void>;
+  remove(): void | Promise<void>;
+  // Optional: report writes from elsewhere, e.g. another tab; null when removed.
+  subscribe?(callback: (data: string | null) => void): () => void;
+}
+```
+
+Throw from `write` when the data cannot be stored, such as when a quota is exceeded. The store catches it and reports it through `onError`.
+
 ## Store-Level Usage
 
 ```ts
@@ -104,33 +141,42 @@ const userStore = createStore('user', {
 ## Validation and Transform
 
 ```ts
-persist: {
-  adapter: new LocalStorageAdapter('settings-v2'),
-  transform: {
-    out: (data) => ({ ...data, savedAt: Date.now() }),
-    in: (data) => ({ ...data, savedAt: undefined }),
+const useSettings = defineStore('settings', {
+  state: () => ({ theme: 'light', lastSync: new Date(0) }),
+  persist: {
+    adapter: new LocalStorageAdapter('settings-v2'),
+    transform: {
+      // A Date does not survive JSON, so store it as a string...
+      out: (slice) => ({ ...slice, lastSync: slice.lastSync?.toISOString() }),
+      // ...and turn it back into a Date when loading.
+      in: (data) => ({ ...data, lastSync: new Date(String(data.lastSync)) }),
+    },
+    validator: (data) => data.theme === 'light' || data.theme === 'dark',
+    onError(error, operation) {
+      console.warn('Persistence error:', operation, error.message);
+    },
   },
-  validator: (data) => typeof data === 'object' && data !== null,
-  onError(error, operation) {
-    console.warn('Persistence error:', operation, error.message);
-  },
-}
+});
 ```
 
 ## Migrations
 
-```ts
-import { CommonMigrations } from '@quantajs/core';
+Each migration is keyed by the version it produces and receives the data as stored under the previous one:
 
+```ts
 persist: {
   adapter: new LocalStorageAdapter('app-store'),
   version: 3,
   migrations: {
-    2: CommonMigrations.addProperty('featureFlags', {}),
-    3: CommonMigrations.renameProperty('user', 'currentUser'),
+    // 1 → 2: add a property
+    2: (data) => ({ ...data, featureFlags: {} }),
+    // 2 → 3: rename one
+    3: ({ user, ...rest }) => ({ ...rest, currentUser: user }),
   },
 }
 ```
+
+Data stored at version 1 runs through `migrations[2]` and then `migrations[3]`. Data from a newer version than the store's is refused rather than loaded.
 
 ## `PersistenceManager`
 
