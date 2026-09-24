@@ -7,7 +7,7 @@ description: What changed from 2.x, and how to update your code.
 
 3.0 removes APIs that were deprecated or never meant to be public, types persistence end to end, and fixes how development builds are detected. It also adds official [Vue](/docs/integration/vue-integration) and [Svelte](/docs/integration/svelte-integration) bindings. Stores themselves are unchanged: a `defineStore` definition from 2.x works as it is.
 
-All packages now share one version number, so `@quantajs/core`, `@quantajs/react`, `@quantajs/devtools`, `@quantajs/vue` and `@quantajs/svelte` are released together as 3.0.0. Update them together:
+All packages now share one version number, so `@quantajs/core`, `@quantajs/react`, `@quantajs/devtools`, `@quantajs/vue` and `@quantajs/svelte` are released together as 3.0.0. Update them together: `@quantajs/react` and `@quantajs/devtools` now require the other QuantaJS packages from the same major.
 
 ```bash
 npm install @quantajs/core@3 @quantajs/react@3
@@ -26,6 +26,8 @@ Coming from 2.0? Apply [Migrating to 2.1](/docs/getting-started/migration-2-1) f
 | `CommonMigrations`, `MigrationManager`, `createMigrationManager` | Plain functions in `persist.migrations` | **removed** |
 | `createPersistenceManager` | The `persist` store option | **removed** |
 | `debounce`, `Logger`, `createLogger` | Your own utilities; `logger` and `LogLevel` remain | **removed** |
+| `pauseTracking`, `resumeTracking` | `untrack(fn)` | **removed** |
+| `sanitizePayload`, `safeJsonParse`, `safeJsonReviver` | Applied automatically to persisted and hydrated data | **removed** |
 | `RawActions`, `GetterDefinitions`, `ActionDefinition`, `InferActions`, `StoreInstance`, `StoreOptions` | See [Deprecated types](#deprecated-types) | **removed types** |
 | Persistence options typed with `any` | Typed from the store's state | *types* |
 | `validator` saw the transformed output on save | Sees the slice before `transform.out`, as on load | *behaviour* |
@@ -93,6 +95,19 @@ Stores create their persistence manager from the `persist` option, and expose it
 ### Utilities
 
 `debounce`, `Logger` and `createLogger` were internal utilities. `logger` and `LogLevel` remain, for controlling what QuantaJS itself prints; see [Logger](/docs/api/logger). Use your own utilities for application code.
+
+### Tracking and sanitising helpers
+
+`pauseTracking()` and `resumeTracking()` were the internals behind `untrack`. Use `untrack`, which also restores tracking if the function throws:
+
+```diff
+- const previous = pauseTracking();
+- const value = state.count;
+- resumeTracking(previous);
++ const value = untrack(() => state.count);
+```
+
+`sanitizePayload()`, `safeJsonParse()` and `safeJsonReviver()` are no longer exported. Persisted data and container snapshots are still sanitised automatically, and the default `deserialize` still drops `__proto__`, `constructor` and `prototype` keys.
 
 ### Deprecated types
 
