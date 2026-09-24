@@ -120,12 +120,9 @@ const shoppingCartStore = createStore('shopping-cart', {
       return true;
     },
     onError: (error, operation) => {
-      if (operation === 'read' && !store.validator(data)) {
-        // Clear invalid cart data
-        store.items = [];
-        store.appliedCoupons = [];
-        store.lastUpdated = Date.now();
-      }
+      // Stored data that fails the validator is not loaded, so the store
+      // keeps its defaults. Remove it so the next visit starts clean.
+      if (operation === 'read') store.$persist?.clear();
     }
   },
   getters: {

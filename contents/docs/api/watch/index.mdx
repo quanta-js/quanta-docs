@@ -22,7 +22,11 @@ Watches for changes in reactive state and executes a callback when changes occur
 function watch<T>(
   source: () => T,
   callback: (value: T, oldValue?: T) => void,
-  options?: { deep?: boolean; immediate?: boolean }
+  options?: {
+    deep?: boolean;
+    immediate?: boolean;
+    equals?: (value: T, oldValue: T) => boolean;
+  }
 ): () => void;
 ```
 
@@ -32,7 +36,8 @@ function watch<T>(
 - `callback`: A function that executes when the watched value changes. Receives the new value and optionally the old value as parameters.
 - `options` (optional): Configuration options:
   - `deep`: Whether to perform deep watching (defaults to `false`). When `true`, recursively tracks all nested properties for changes.
-  - `immediate`: Whether to invoke the callback immediately upon setup (defaults to `true`).
+  - `immediate`: Whether to invoke the callback once immediately upon setup (defaults to `false`).
+  - `equals`: Decides whether a re-run produced the same value; the callback fires only when it returns `false`. Defaults to `Object.is`. Ignored with `deep`.
 
 ## Returns
 
@@ -48,7 +53,7 @@ const state = reactive({
   name: 'Quanta',
 });
 
-// Watch a single value (callback runs immediately by default)
+// Watch a single value (the callback runs on the next change)
 const unwatchCount = watch(() => state.count, (newValue, oldValue) => {
   console.log(`Count changed from ${oldValue} to ${newValue}`);
 });
@@ -378,20 +383,20 @@ const unwatchPreferences = watch(() => appState.preferences, (preferences) => {
 
 ### Immediate Execution
 
-By default, watch executes the callback immediately when set up. You can disable this behavior:
+By default the callback runs only when the value changes. Pass `immediate: true` to also run it once when the watcher is set up:
 
 ```javascript
 const state = reactive({ count: 0 });
 
-// Execute immediately (default)
+// Only runs when count changes (default)
 watch(() => state.count, (value) => {
-  console.log(value); // Runs immediately with current value
+  console.log(value);
 });
 
-// Don't execute immediately
+// Also runs immediately with the current value
 watch(() => state.count, (value) => {
-  console.log(value); // Only runs when count changes
-}, { immediate: false });
+  console.log(value);
+}, { immediate: true });
 ```
 
 ### Deep Watching
@@ -426,6 +431,26 @@ unwatch();
 ```
 
 **Note:** Deep watching recursively accesses all nested properties to register reactive dependencies. For very large or deeply nested objects, prefer watching specific properties for better performance.
+
+### Custom Equality
+
+The callback fires when the source returns a value that is not `Object.is`-equal to the previous one. A source that builds a new object on each run is never equal, so pass `shallow` to compare it one level deep:
+
+```javascript
+import { reactive, shallow, watch } from '@quantajs/core';
+
+const form = reactive({ errors: [], touched: [] });
+
+// Re-runs whenever either list changes, but fires only when
+// `valid` or `dirty` actually flips.
+watch(
+  () => ({ valid: form.errors.length === 0, dirty: form.touched.length > 0 }),
+  (status) => updateSubmitButton(status),
+  { equals: shallow },
+);
+```
+
+The opposite also works: `equals: () => false` fires on every change the source tracks, including an in-place mutation of an object it returns by identity.
 
 ## Cleanup
 

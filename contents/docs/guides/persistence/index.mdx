@@ -115,7 +115,7 @@ const store = createStore('selective', {
 
 ### Custom Serialization
 
-Handle complex data types that can't be serialized with JSON:
+Handle complex data types that can't be serialized with JSON. `serialize` receives the whole stored envelope, `{ data, version, timestamp, storeName }`, not only the state, and `deserialize` must return that shape. A JSON replacer and reviver pair, as here, handles that naturally.
 
 ```javascript
 const store = createStore('complex', {
@@ -190,10 +190,9 @@ const store = createStore('validated', {
       return true;
     },
     onError: (error, operation) => {
-      if (operation === 'read' && !store.validator(data)) {
-        // If validation fails, reset to defaults
-        store.$reset();
-      }
+      // Stored data that fails the validator is not loaded, so the store
+      // keeps its defaults. Remove it so the next visit starts clean.
+      if (operation === 'read') store.$persist?.clear();
     }
   }
 });
@@ -240,28 +239,32 @@ const store = createStore('evolving', {
 });
 ```
 
-### Using Common Migration Patterns
+### Common Migration Patterns
 
-QuantaJS provides common migration patterns for typical schema changes:
+A migration is a plain function from the data as stored under the previous version to the new shape. The usual changes take a line or two each:
 
 ```javascript
-import { CommonMigrations } from '@quantajs/core';
-
 const store = createStore('patterns', {
   state: () => ({
-    user: null,
+    currentUser: null,
     settings: { theme: 'light', language: 'en' }
   }),
   persist: {
     adapter: new LocalStorageAdapter('patterns-store'),
     version: 4,
     migrations: {
-      2: CommonMigrations.addProperty('settings', { language: 'en' }),
-      3: CommonMigrations.renameProperty('user', 'currentUser'),
-      4: CommonMigrations.transformProperty('settings', (settings) => ({
-        ...settings,
-        theme: settings.theme === 'auto' ? 'light' : settings.theme
-      }))
+      // 1 → 2: add a property
+      2: (data) => ({ ...data, settings: { language: 'en', ...data.settings } }),
+      // 2 → 3: rename a property
+      3: ({ user, ...rest }) => ({ ...rest, currentUser: user }),
+      // 3 → 4: transform a property
+      4: (data) => ({
+        ...data,
+        settings: {
+          ...data.settings,
+          theme: data.settings.theme === 'auto' ? 'light' : data.settings.theme
+        }
+      })
     }
   }
 });
@@ -570,11 +573,9 @@ const cartStore = createStore('cart', {
       return true;
     },
     onError: (error, operation) => {
-      if (operation === 'read' && !store.validator(data)) {
-        // Clear invalid cart data
-        store.items = [];
-        store.appliedCoupons = [];
-      }
+      // Stored data that fails the validator is not loaded, so the store
+      // keeps its defaults. Remove it so the next visit starts clean.
+      if (operation === 'read') store.$persist?.clear();
     }
   }
 });

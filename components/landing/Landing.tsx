@@ -159,6 +159,12 @@ function Features() {
     );
 }
 
+const BINDINGS = [
+    { name: "React", href: "/docs/integration/react-integration" },
+    { name: "Vue", href: "/docs/integration/vue-integration" },
+    { name: "Svelte", href: "/docs/integration/svelte-integration" },
+];
+
 const FACTS = [
     { value: "0", label: "runtime dependencies in @quantajs/core" },
     { value: "9.5", label: "KB gzip for a store and the React hooks" },
@@ -191,8 +197,8 @@ export default function Landing() {
                         <p className="max-w-[32rem] text-lg leading-relaxed text-[var(--dim)]">
                             Write a value and only the code that read it runs — once. Typed
                             stores, async action state, request-scoped containers and
-                            persistence in a framework-free core, with official React
-                            bindings and no runtime dependencies.
+                            persistence in a framework-free core, with official React,
+                            Vue and Svelte bindings and no runtime dependencies.
                         </p>
                         <div className="flex flex-wrap gap-3">
                             <Link href="/docs/getting-started/quick-start-guide" className={primary}>
@@ -202,7 +208,23 @@ export default function Landing() {
                                 GitHub
                             </Link>
                         </div>
-                        <InstallCommand />
+                        <div className="flex flex-col gap-3">
+                            <InstallCommand />
+                            <p className="font-code text-[0.72rem] text-[var(--dim)]">
+                                + bindings for{" "}
+                                {BINDINGS.map((b, i) => (
+                                    <span key={b.name}>
+                                        {i > 0 && (i === BINDINGS.length - 1 ? " and " : ", ")}
+                                        <Link
+                                            href={b.href}
+                                            className={`${styles.link} text-[var(--text)] underline decoration-[var(--line-strong)] underline-offset-4 hover:text-[var(--teal)]`}
+                                        >
+                                            {b.name}
+                                        </Link>
+                                    </span>
+                                ))}
+                            </p>
+                        </div>
                     </div>
                 </div>
                 <p className="pointer-events-none absolute bottom-6 left-0 right-0 mx-auto w-full max-w-[1200px] px-5 font-code text-[0.7rem] text-[var(--faint)] sm:px-8 lg:text-right" aria-hidden>

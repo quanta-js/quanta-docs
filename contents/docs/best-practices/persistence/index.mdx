@@ -200,10 +200,9 @@ const store = createStore('validated', {
       return true;
     },
     onError: (error, operation) => {
-      if (operation === 'read' && !store.validator(data)) {
-        // Reset to defaults if validation fails
-        store.$reset();
-      }
+      // Stored data that fails the validator is not loaded, so the store
+      // keeps its defaults. Remove it so the next visit starts clean.
+      if (operation === 'read') store.$persist?.clear();
     }
   }
 });
@@ -255,28 +254,32 @@ const store = createStore('evolving', {
 });
 ```
 
-### Use Common Migration Patterns
+### Keep Migrations Small
 
-Leverage built-in migration helpers for common operations:
+Write one plain function per version, each doing one thing, so every step is easy to test on its own:
 
 ```javascript
-import { CommonMigrations } from '@quantajs/core';
-
 const store = createStore('patterns', {
   state: () => ({
-    user: null,
-    settings: { theme: 'light' }
+    currentUser: null,
+    settings: { theme: 'light', language: 'en' }
   }),
   persist: {
     adapter: new LocalStorageAdapter('patterns-store'),
     version: 4,
     migrations: {
-      2: CommonMigrations.addProperty('settings', { language: 'en' }),
-      3: CommonMigrations.renameProperty('user', 'currentUser'),
-      4: CommonMigrations.transformProperty('settings', (settings) => ({
-        ...settings,
-        theme: settings.theme === 'auto' ? 'light' : settings.theme
-      }))
+      // 1 → 2: add a property
+      2: (data) => ({ ...data, settings: { language: 'en', ...data.settings } }),
+      // 2 → 3: rename a property
+      3: ({ user, ...rest }) => ({ ...rest, currentUser: user }),
+      // 3 → 4: transform a property
+      4: (data) => ({
+        ...data,
+        settings: {
+          ...data.settings,
+          theme: data.settings.theme === 'auto' ? 'light' : data.settings.theme
+        }
+      })
     }
   }
 });

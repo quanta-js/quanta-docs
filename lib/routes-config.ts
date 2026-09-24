@@ -21,10 +21,11 @@ export const ROUTES: EachRoute[] = [
             },
             { title: "Quick Start Guide", href: "/quick-start-guide" },
             {
-                title: "Migrating to 2.1",
+                title: "Migrating to 3.0",
                 href: "/migration",
                 tag: "New!",
             },
+            { title: "Migrating to 2.1", href: "/migration-2-1" },
         ],
     },
     {
@@ -57,6 +58,8 @@ export const ROUTES: EachRoute[] = [
         noLink: true,
         items: [
             { title: "React Integration", href: "/react-integration" },
+            { title: "Vue Integration", href: "/vue-integration", tag: "New!" },
+            { title: "Svelte Integration", href: "/svelte-integration", tag: "New!" },
             { title: "Next.js Integration", href: "/nextjs-integration" },
         ],
     },

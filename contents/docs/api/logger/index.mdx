@@ -1,42 +1,19 @@
 ---
 title: Logger
-description: API reference for the logger service in QuantaJS.
+description: Control the warnings and errors QuantaJS prints.
 ---
 
 # Logger
 
-<Note title="These examples use `createStore`">
-`createStore` builds a store instance immediately and is still fully supported.
-In application code prefer [`defineStore`](/docs/api/define-store), which
-returns an accessor you call — it is safe at module scope on a server and needs
-no container passed around. Everything on this page applies to both.
-</Note>
-
-
-QuantaJS includes a comprehensive logging service that works across all JavaScript environments (Node.js, browser, and web workers). The logger provides configurable log levels, timestamps, prefixes, and color support.
-
-## Overview
-
-The logger service is exported from `@quantajs/core` and provides:
-
-- Multiple log levels (DEBUG, INFO, WARN, ERROR, SILENT)
-- Environment detection (Node.js, browser, web worker)
-- Configurable formatting (timestamps, prefixes, colors)
-- Child loggers with prefixes
-- Safe console method execution
-
-## Exports
+QuantaJS reports problems through its own logger: a store that persists its whole state, a getter that shadows a state key, a subscriber that throws. `logger` and `LogLevel` let you decide what gets printed.
 
 ```typescript
-import { logger, Logger, LogLevel, createLogger } from '@quantajs/core';
+import { logger, LogLevel } from '@quantajs/core';
 ```
 
-- `logger`: Default logger instance
-- `Logger`: Logger class for creating custom instances
-- `LogLevel`: Enum of available log levels
-- `createLogger`: Convenience function to create a logger with specific config
+These diagnostics are only emitted in development. In a production build, where your bundler sets `process.env.NODE_ENV` to `"production"`, they are skipped. Failures your code has to handle are not only logged: they are thrown, or passed to callbacks such as `persist.onError`.
 
-## LogLevel Enum
+## Log levels
 
 ```typescript
 enum LogLevel {
@@ -48,324 +25,47 @@ enum LogLevel {
 }
 ```
 
-## Basic Usage
+Messages below the current level are dropped. The default is `LogLevel.INFO`.
 
-### Using the Default Logger
-
-```javascript
-import { logger } from '@quantajs/core';
-
-// Log at different levels
-logger.debug('Debug message');
-logger.info('Info message');
-logger.log('Log message'); // Alias for info
-logger.warn('Warning message');
-logger.error('Error message');
-```
-
-### Setting Log Level
-
-```javascript
-import { logger, LogLevel } from '@quantajs/core';
-
-// Only show warnings and errors
-logger.setLevel(LogLevel.WARN);
-
-logger.debug('This won\'t be shown');
-logger.info('This won\'t be shown');
-logger.warn('This will be shown');
-logger.error('This will be shown');
-```
-
-### Configuring the Logger
-
-```javascript
-import { logger } from '@quantajs/core';
-
-logger.configure({
-  level: LogLevel.DEBUG,
-  prefix: 'MyApp',
-  timestamp: true,
-  colors: true, // Only in Node.js
-});
-```
-
-## Creating Custom Loggers
-
-### Using createLogger
-
-```javascript
-import { createLogger, LogLevel } from '@quantajs/core';
-
-const appLogger = createLogger({
-  level: LogLevel.INFO,
-  prefix: 'App',
-  timestamp: true,
-});
-
-appLogger.info('Application started');
-appLogger.error('Something went wrong');
-```
-
-### Using the Logger Class
-
-```javascript
-import { Logger, LogLevel } from '@quantajs/core';
-
-const customLogger = new Logger({
-  level: LogLevel.DEBUG,
-  prefix: 'Custom',
-  timestamp: true,
-  colors: false,
-});
-
-customLogger.debug('Custom debug message');
-```
-
-## Logger Configuration
-
-### LoggerConfig Interface
+## Silencing or reducing output
 
 ```typescript
-interface LoggerConfig {
-  level: LogLevel;
-  prefix?: string;
-  timestamp?: boolean;
-  colors?: boolean;
-  formatters?: {
-    [key: string]: (message: string, ...args: any[]) => string;
-  };
-}
-```
-
-### Configuration Options
-
-- **`level`**: Minimum log level to display (default: `LogLevel.INFO`)
-- **`prefix`**: Optional prefix for all log messages
-- **`timestamp`**: Whether to include timestamps (default: `true`)
-- **`colors`**: Whether to use colors in Node.js (default: `true`, browser-safe)
-- **`formatters`**: Custom formatters for specific log levels
-
-## Child Loggers
-
-Create child loggers with nested prefixes:
-
-```javascript
-import { logger } from '@quantajs/core';
-
-const storeLogger = logger.child('Store');
-const userStoreLogger = storeLogger.child('User');
-
-// Output: [INFO] [Store:User] User store initialized
-userStoreLogger.info('User store initialized');
-```
-
-## Environment Detection
-
-The logger automatically detects the environment and adjusts behavior:
-
-```javascript
-import { isNodeEnvironment, isBrowserEnvironment, isWebWorkerEnvironment } from '@quantajs/core';
-
-if (isNodeEnvironment()) {
-  console.log('Running in Node.js');
-}
-
-if (isBrowserEnvironment()) {
-  console.log('Running in browser');
-}
-
-if (isWebWorkerEnvironment()) {
-  console.log('Running in web worker');
-}
-```
-
-## Usage Examples
-
-### Store Logging
-
-```javascript
-import { createStore, createLogger, LogLevel } from '@quantajs/core';
-
-const storeLogger = createLogger({
-  prefix: 'Store',
-  level: LogLevel.DEBUG,
-});
-
-const userStore = createStore('user', {
-  state: () => ({ user: null }),
-  actions: {
-    login(user) {
-      storeLogger.debug('User login attempt', user);
-      this.user = user;
-      storeLogger.info('User logged in successfully');
-    },
-    logout() {
-      storeLogger.info('User logged out');
-      this.user = null;
-    },
-  },
-});
-```
-
-### Development vs Production
-
-```javascript
 import { logger, LogLevel } from '@quantajs/core';
 
-const isDevelopment = process.env.NODE_ENV === 'development';
+// Only errors, for example in a test suite that expects warnings.
+logger.setLevel(LogLevel.ERROR);
 
-logger.configure({
-  level: isDevelopment ? LogLevel.DEBUG : LogLevel.WARN,
-  timestamp: isDevelopment,
-  colors: isDevelopment && typeof process !== 'undefined',
-});
+// Nothing at all.
+logger.setLevel(LogLevel.SILENT);
 ```
 
-### Error Tracking
+`logger.getLevel()` returns the current level.
 
-```javascript
-import { logger } from '@quantajs/core';
+## Formatting
 
-try {
-  // Some operation
-  riskyOperation();
-} catch (error) {
-  logger.error('Operation failed', error);
-  // Send to error tracking service
-  errorTrackingService.captureException(error);
-}
-```
-
-### Conditional Logging
-
-```javascript
-import { logger, LogLevel } from '@quantajs/core';
-
-function performExpensiveOperation() {
-  logger.debug('Starting expensive operation');
-  
-  // Only log in development
-  if (logger.getLevel() <= LogLevel.DEBUG) {
-    logger.debug('Operation details:', { /* large object */ });
-  }
-  
-  // Perform operation
-  const result = expensiveComputation();
-  
-  logger.info('Operation completed', result);
-  return result;
-}
-```
-
-## Logger Methods
-
-### log / info
-
-Standard logging at INFO level:
-
-```javascript
-logger.log('Message');
-logger.info('Message'); // Alias for log
-```
-
-### debug
-
-Debug-level logging (only shown when level is DEBUG):
-
-```javascript
-logger.debug('Debug information');
-```
-
-### warn
-
-Warning-level logging:
-
-```javascript
-logger.warn('Warning message');
-```
-
-### error
-
-Error-level logging:
-
-```javascript
-logger.error('Error message');
-```
-
-### configure
-
-Update logger configuration:
-
-```javascript
+```typescript
 logger.configure({
   level: LogLevel.WARN,
-  prefix: 'NewPrefix',
+  prefix: 'quanta',   // prepended to every message
+  timestamp: false,   // on by default
+  colors: false,      // ANSI colours in Node.js; ignored in browsers
 });
 ```
 
-### setLevel
+`configure` merges into the current configuration, so pass only what you want to change.
 
-Set the minimum log level:
+## Capturing messages
 
-```javascript
-logger.setLevel(LogLevel.ERROR);
+The logger writes through `console`, so tools that capture console output, such as error trackers and test spies, see its messages:
+
+```typescript
+import { vi } from 'vitest';
+
+const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+// ...code that should warn...
+expect(warn).toHaveBeenCalledWith(expect.stringContaining('persists its entire state'));
 ```
 
-### getLevel
+## In 3.0
 
-Get the current log level:
-
-```javascript
-const currentLevel = logger.getLevel();
-```
-
-### child
-
-Create a child logger with a prefix:
-
-```javascript
-const childLogger = logger.child('Component');
-```
-
-## Best Practices
-
-### Use Appropriate Log Levels
-
-- **DEBUG**: Detailed information for debugging
-- **INFO**: General informational messages
-- **WARN**: Warning messages for potential issues
-- **ERROR**: Error messages for failures
-
-### Use Prefixes for Context
-
-```javascript
-const componentLogger = logger.child('UserComponent');
-componentLogger.info('Component mounted');
-```
-
-### Configure for Environment
-
-```javascript
-logger.configure({
-  level: process.env.NODE_ENV === 'production' 
-    ? LogLevel.WARN 
-    : LogLevel.DEBUG,
-});
-```
-
-### Avoid Logging Sensitive Data
-
-```javascript
-// ❌ Bad
-logger.info('User data:', { password: 'secret' });
-
-// ✅ Good
-logger.info('User logged in:', { userId: user.id });
-```
-
-## Learn More
-
-- [Core Concepts](/docs/guides/reactive-state) - Understanding QuantaJS
-- [API Reference](/docs/api/create-store) - Complete API documentation
-
+`Logger`, `createLogger` and the environment helpers are no longer exported: the logger is QuantaJS's diagnostics channel, not a general-purpose logger. Use your own logging library for application messages. See [Migrating to 3.0](/docs/getting-started/migration).

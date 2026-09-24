@@ -5,12 +5,12 @@ description: How to install QuantaJS in your project.
 
 # Installation
 
-Get started with QuantaJS by installing the appropriate package for your needs. QuantaJS is available as two separate packages to give you exactly what you need.
+QuantaJS is a framework-free core with official bindings for React, Vue and Svelte. Install the core, then the bindings for your framework, if any.
 
 ## Prerequisites
 
-- Node.js (v14 or higher)
-- npm (v6 or higher), yarn, or pnpm
+- Node.js 20 or later for server rendering and tooling (tested on 20, 22 and 24)
+- npm, yarn or pnpm
 
 ## Package Options
 
@@ -36,8 +36,30 @@ yarn add @quantajs/react @quantajs/core
 pnpm add @quantajs/react @quantajs/core
 ```
 
+### @quantajs/vue
+For Vue 3.3 and later, including Nuxt. See [Vue Integration](/docs/integration/vue-integration).
+
+```bash
+npm install @quantajs/vue @quantajs/core
+# or
+yarn add @quantajs/vue @quantajs/core
+# or
+pnpm add @quantajs/vue @quantajs/core
+```
+
+### @quantajs/svelte
+For Svelte 4 and 5, including SvelteKit. See [Svelte Integration](/docs/integration/svelte-integration).
+
+```bash
+npm install @quantajs/svelte @quantajs/core
+# or
+yarn add @quantajs/svelte @quantajs/core
+# or
+pnpm add @quantajs/svelte @quantajs/core
+```
+
 <Callout type="info">
-@quantajs/react depends on @quantajs/core, so both packages will be installed when you install the React package.
+Each binding depends on `@quantajs/core`. Install both anyway, so your app imports `defineStore` from a direct dependency, and keep all QuantaJS packages on the same version: they are released together.
 </Callout>
 
 ### @quantajs/devtools
