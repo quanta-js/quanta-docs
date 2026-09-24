@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { getDocsForSlug } from "@/lib/markdown";
 import { Typography } from "@/components/typography";
 import { CopyButton } from "@/components/CopyButton";
+import { Pencil } from "lucide-react";
 import { StructuredData, generateArticleStructuredData } from "@/components/structured-data";
 
 type PageProps = {
@@ -17,6 +18,8 @@ export default async function DocsPage(props: PageProps) {
   const params = await props.params;
   const { slug = [] } = params;
   const pathName = slug.join('/');
+  const sourcePath = pathName ? `${pathName}/index.mdx` : "index.mdx";
+  const editUrl = `https://github.com/quanta-js/quanta-docs/edit/master/contents/docs/${sourcePath}`;
 
   const res = await getDocsForSlug(pathName);
   if (!res) notFound();
@@ -45,6 +48,17 @@ export default async function DocsPage(props: PageProps) {
               {res.frontmatter.description}
             </p> */}
             <div>{res.content}</div>
+            <div className="mt-10 border-t pt-4">
+              <a
+                href={editUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 text-sm text-muted-foreground no-underline transition-colors hover:text-foreground"
+              >
+                <Pencil className="h-4 w-4" aria-hidden="true" />
+                Edit this page on GitHub
+              </a>
+            </div>
             <Pagination pathname={pathName} />
           </Typography>
         </div>
