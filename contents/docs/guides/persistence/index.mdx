@@ -44,7 +44,7 @@ This automatically:
 
 ### Understanding Storage Adapters
 
-QuantaJS provides three storage adapters for different use cases:
+QuantaJS provides four storage adapters for different use cases:
 
 #### LocalStorage Adapter
 
@@ -90,6 +90,24 @@ const store = createStore('large', {
   }
 });
 ```
+
+#### Cookie Adapter
+
+For a small piece of state the server should also see, such as a theme or locale. The cookie travels with every request, so persist only what the server needs:
+
+```javascript
+import { CookieAdapter } from '@quantajs/core';
+
+const store = createStore('prefs', {
+  state: () => ({ theme: 'light', recentSearches: [] }),
+  persist: {
+    adapter: new CookieAdapter('prefs', { maxAge: 60 * 60 * 24 * 365 }),
+    include: ['theme'],
+  }
+});
+```
+
+A cookie holds at most 4096 bytes. A write that would exceed that throws, and the store reports it through `onError` while the previous cookie stays in place.
 
 ## Advanced Configuration
 

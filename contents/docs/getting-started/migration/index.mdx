@@ -158,4 +158,5 @@ Nothing to change in your code.
 - **Lit bindings**: [`@quantajs/lit`](/docs/integration/lit-integration), the same four as reactive controllers for web components.
 - **Astro integration**: [`@quantajs/astro`](/docs/integration/astro-integration) gives each request its own container, carries server state to the islands, and lets React, Vue and Svelte islands share one store.
 - **`setDefaultContainerResolver`**, for any server that renders components without passing a container: resolve the default container per request, for example from `AsyncLocalStorage`. See [Containers](/docs/api/containers#a-request-scoped-default-container).
+- **`CookieAdapter`**, to persist small state, such as a theme, in a cookie the server also receives. See [Persistence](/docs/api/persistence#cookieadapter).
 - **`watch` takes `equals`**, to compare a source's values with `shallow` or your own function instead of `Object.is`. See [watch](/docs/api/watch#custom-equality).
