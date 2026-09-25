@@ -1,0 +1,316 @@
+---
+title: "Announcing QuantaJS 3.0: One Store for Every Framework"
+description: "QuantaJS 3.0 adds official Vue, Svelte and Lit bindings and an Astro integration, so one store definition works everywhere. It also brings request-scoped server state, a cookie adapter, a smaller build and a leaner API."
+date: "26-09-2026"
+authors:
+  - username: "Jeel Gajera"
+    handle: "jeelgajera"
+    handleUrl: "https://github.com/jeelgajera"
+    avatar: "https://avatars.githubusercontent.com/u/83470656?v=4"
+cover: "https://images.pexels.com/photos/3845161/pexels-photo-3845161.jpeg"
+---
+
+# Announcing QuantaJS 3.0
+
+QuantaJS `3.0.0` is out, and it is the release the name "framework-agnostic"
+was always promising.
+
+Until now, `@quantajs/core` ran anywhere, but React was the only framework with
+official bindings. 3.0 adds **Vue**, **Svelte** and **Lit**, and an **Astro**
+integration that lets islands written in different frameworks share one store.
+A store you define once now works in all of them, with the same containers,
+server rendering and persistence.
+
+It is a major version for two reasons. The public API is smaller: things that
+were deprecated, duplicated or internal are gone. And every package now shares
+one version number, so the question "which `@quantajs/react` goes with which
+`@quantajs/core`?" no longer exists. The answer is always "the same one".
+
+---
+
+## One store, five frameworks
+
+Here is a store:
+
+```ts
+// stores/cart.ts
+import { defineStore } from '@quantajs/core';
+
+export const useCart = defineStore('cart', {
+  state: () => ({ items: [] as string[] }),
+  getters: { count: (s) => s.items.length },
+  actions: {
+    add(item: string) {
+      this.items.push(item);
+    },
+  },
+});
+```
+
+And here is the same button in each framework. Every binding has the same
+shape: read a value through a selector, get actions without subscribing.
+
+<Tabs defaultValue="react">
+<TabsList>
+<TabsTrigger value="react">React</TabsTrigger>
+<TabsTrigger value="vue">Vue</TabsTrigger>
+<TabsTrigger value="svelte">Svelte</TabsTrigger>
+<TabsTrigger value="lit">Lit</TabsTrigger>
+</TabsList>
+<TabsContent value="react">
+
+```tsx
+import { useQuantaActions, useQuantaValue } from '@quantajs/react';
+import { useCart } from './stores/cart';
+
+export function CartButton() {
+  const count = useQuantaValue(useCart, (s) => s.count);
+  const cart = useQuantaActions(useCart);
+  return <button onClick={() => cart.add('tea')}>{count} items</button>;
+}
+```
+
+</TabsContent>
+<TabsContent value="vue">
+
+```html
+<script setup lang="ts">
+import { useQuantaActions, useQuantaValue } from '@quantajs/vue';
+import { useCart } from './stores/cart';
+
+const count = useQuantaValue(useCart, (s) => s.count);
+const cart = useQuantaActions(useCart);
+</script>
+
+<template>
+  <button @click="cart.add('tea')">{{ count }} items</button>
+</template>
+```
+
+</TabsContent>
+<TabsContent value="svelte">
+
+```html
+<script lang="ts">
+  import { useQuantaActions, useQuantaValue } from '@quantajs/svelte';
+  import { useCart } from './stores/cart';
+
+  const count = useQuantaValue(useCart, (s) => s.count);
+  const cart = useQuantaActions(useCart);
+</script>
+
+<button onclick={() => cart.add('tea')}>{$count} items</button>
+```
+
+</TabsContent>
+<TabsContent value="lit">
+
+```ts
+import { LitElement, html } from 'lit';
+import { QuantaActionsController, QuantaValueController } from '@quantajs/lit';
+import { useCart } from './stores/cart';
+
+class CartButton extends LitElement {
+  private count = new QuantaValueController(this, useCart, (s) => s.count);
+  private cart = new QuantaActionsController(this, useCart);
+
+  render() {
+    return html`<button @click=${() => this.cart.store.add('tea')}>
+      ${this.count.value} items
+    </button>`;
+  }
+}
+customElements.define('cart-button', CartButton);
+```
+
+</TabsContent>
+</Tabs>
+
+In each of them, the button re-renders when `count` changes and at no other
+time. The selector runs inside QuantaJS's own dependency tracking, so this holds
+even when you mutate an array in place.
+
+| Package | For | Guide |
+|---|---|---|
+| `@quantajs/react` | React 18 and 19, Next.js App Router | [React](/docs/integration/react-integration) |
+| `@quantajs/vue` | Vue 3.3 and later | [Vue](/docs/integration/vue-integration) |
+| `@quantajs/svelte` | Svelte 4 and 5, SvelteKit | [Svelte](/docs/integration/svelte-integration) |
+| `@quantajs/lit` | Lit 2 and 3, web components | [Lit](/docs/integration/lit-integration) |
+| `@quantajs/astro` | Astro 7 islands | [Astro](/docs/integration/astro-integration) |
+
+Two of these deserve their own posts:
+
+- **Astro.** Islands are isolated by design, and Astro's own recipe for sharing
+  state notes that a store written on the server does not reach client islands.
+  `@quantajs/astro` gives each request its own container and carries its state
+  into every island, whatever framework it uses.
+  [One store, every island](/blogs/sharing-state-across-astro-islands).
+- **Lit.** Web components have had no settled answer for shared state.
+  `@quantajs/lit` brings stores to them as reactive controllers.
+  [State management for web components](/blogs/state-management-for-web-components-with-lit).
+
+---
+
+## Server state without passing containers around
+
+2.1 introduced containers: one per request, so concurrent requests never share
+state. The catch was that you had to pass the container everywhere, which falls
+apart as soon as a framework renders your components for you.
+
+`setDefaultContainerResolver` lets a server decide which container is the
+default for the code running right now:
+
+```ts
+import { AsyncLocalStorage } from 'node:async_hooks';
+import {
+  createContainer,
+  setDefaultContainerResolver,
+  type StoreContainer,
+} from '@quantajs/core';
+
+const requests = new AsyncLocalStorage<StoreContainer>();
+setDefaultContainerResolver(() => requests.getStore());
+
+export async function handle(request: Request) {
+  const container = createContainer();
+  try {
+    // Anything in here, including components rendered on the server,
+    // resolves stores against this request's container.
+    return await requests.run(container, () => render(request));
+  } finally {
+    container.dispose();
+  }
+}
+```
+
+Outside a request, the resolver returns `undefined` and the usual default
+applies. The Astro integration is built on exactly this.
+
+## Persist to a cookie
+
+`CookieAdapter` persists small state, such as a theme or locale, in a cookie, so
+the server sees it on the next request:
+
+```ts
+import { CookieAdapter, defineStore } from '@quantajs/core';
+
+export const usePrefs = defineStore('prefs', {
+  state: () => ({ theme: 'light', recent: [] as string[] }),
+  persist: {
+    adapter: new CookieAdapter('prefs', { maxAge: 60 * 60 * 24 * 365 }),
+    include: ['theme'],
+  },
+});
+```
+
+A cookie holds at most 4096 bytes. A write that would go over throws, and the
+store reports it through `onError` instead of silently keeping stale data. This
+adapter came from QuantaJS's first community pull request, by
+[@fatihcvs](https://github.com/fatihcvs). More on that below.
+
+## Also new
+
+- **`watch` takes `equals`**, to decide whether a new value counts as a change.
+  Pass `shallow` for a watcher over a derived object.
+- **Development warnings no longer reach production.** Development mode is read
+  from `process.env.NODE_ENV`, which bundlers replace at build time.
+- **React StrictMode:** `<QuantaProvider>` without a container, and
+  `useLocalStore`, now survive StrictMode's simulated unmount, and
+  `useLocalStore` re-renders on changes.
+- **Persistence loads only the keys a store persists**, so removing a key from
+  `include` actually stops it being restored.
+
+---
+
+## Smaller
+
+The ES build now ships one file per module, so your bundler drops what you do
+not import. Every import path shrank by 1.2 to 1.4 KB gzip; `reactive` plus
+`effect` went from 5.7 KB to 4.4 KB.
+
+What each path costs in a production build, minified and gzipped:
+
+| You import | Size |
+|---|---:|
+| `reactive` + `effect` | 4.4 KB |
+| `defineStore` | 8.6 KB |
+| `defineStore` + React hooks | 9.2 KB |
+| `defineStore` + Vue composables | 8.8 KB |
+| `defineStore` + Svelte stores | 8.8 KB |
+| `defineStore` + Lit controllers | 9.1 KB |
+
+These numbers are checked on every pull request, against a budget.
+
+## Leaner
+
+`@quantajs/core` exported 46 runtime values in 2.3; it exports 33 in 3.0,
+counting the new ones. Removed:
+
+- Name-based lookup (`useStore(name)`, `hasStore(name)`). Call the definition,
+  or use `container.get(name)`.
+- `store.notifyAll()`, `nextTick()` and `reactiveEffect`.
+- The migration helpers and `createPersistenceManager`: `persist` covers both.
+- Internal utilities: `debounce`, `Logger`, `createLogger`, the tracking and
+  sanitising helpers. `logger` and `LogLevel` stay.
+- The deprecated type aliases.
+
+Persistence is also typed end to end now: `include` and `exclude` accept only
+your state's keys, and migrations and validators receive stored data as
+`unknown` values that you check before trusting. When we moved this site to
+3.0, those types caught an unchecked access in one of our own demos.
+
+The [migration guide](/docs/getting-started/migration) covers every removal,
+with the replacement for each.
+
+---
+
+## How we checked it
+
+A state library asks you to trust it with your data, so here is what backs this
+release:
+
+- **587 tests**, plus type tests for the public API.
+- **The oldest versions we claim**: each framework binding is tested in CI
+  against the oldest framework version it supports: React 18, Vue 3.3, Svelte 4 and Lit 2. Testing
+  Vue 3.3 found a real bug before release: `createQuanta()` never disposed its
+  container there.
+- **Seven example apps** (vanilla, React, Next.js, Vue, Svelte, Lit and Astro)
+  are built and checked on every pull request. The Vue, Svelte and Astro
+  examples fire concurrent requests at a server render and check that none
+  sees another's state.
+- **The published packages themselves**: CI packs each tarball and installs it
+  into a fresh app, the way you would.
+- **Provenance**: every package is published from GitHub Actions with npm
+  provenance, only from a tagged release, and only after a maintainer approves
+  it.
+
+## Upgrading
+
+Stores are unchanged: a `defineStore` from 2.x works as it is. Update every
+QuantaJS package together, since they now require each other from the same
+major:
+
+```bash
+npm install @quantajs/core@3 @quantajs/react@3
+```
+
+Add `@quantajs/devtools@3` if you use DevTools.
+
+Then follow the [migration guide](/docs/getting-started/migration) for anything
+you used that was removed.
+
+## Thank you
+
+[@fatihcvs](https://github.com/fatihcvs) sent QuantaJS's first community pull
+requests during this cycle: the cookie adapter, tests for the web storage
+adapters, and missing assertions in the core suite. Each came with a clear
+description of how it was checked. Thank you.
+
+If you would like to contribute too, the
+[good first issues](https://github.com/quanta-js/quanta/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22good%20first%20issue%22)
+are a friendly place to start, and
+[CONTRIBUTING.md](https://github.com/quanta-js/quanta/blob/master/CONTRIBUTING.md)
+gets you set up.
+
+The full list of changes is in the
+[v3.0.0 release notes](https://github.com/quanta-js/quanta/releases/tag/v3.0.0).
