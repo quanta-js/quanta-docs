@@ -23,7 +23,7 @@ The goal was simple: take the best parts of modern state management (reactive st
 - **Server-Safe by Construction**: Containers give you per-request isolation, so one user's state cannot leak into another's — plus `dehydrate()` / `hydrate()` for SSR.
 - **Async, Batteries Included**: Every action carries `pending`, `error` and `abort()`. No hand-rolled loading flags.
 - **Scales Like a Dream**: Tiny scripts or massive systems — QuantaJS grows with you, never weighing you down.
-- **Any Framework**: Official bindings for React, Vue and Svelte, with fine-grained selectors, and a core that runs in any JavaScript environment.
+- **Any Framework**: Official bindings for React, Vue, Svelte and Lit, an Astro integration that shares one store across islands, and a core that runs in any JavaScript environment.
 - **DevTools, Opt-In**: Real-time store inspection, action logging and persistence management — attached only when you ask for it.
 
 QuantaJS combines simplicity with power, offering a lightweight alternative to traditional state management libraries. Whether you're building a small prototype or a large-scale app, QuantaJS adapts to your needs without unnecessary complexity.
@@ -60,6 +60,20 @@ The same functions, returning standard Svelte stores for `$` subscriptions in Sv
 import { useQuantaValue, setQuantaContainer } from '@quantajs/svelte';
 ```
 
+### @quantajs/lit
+Reactive controllers for web components: `QuantaValueController`, `QuantaController`, `QuantaActionsController` and `QuantaLocalController`, with containers scoped through the web components context protocol.
+
+```javascript
+import { QuantaValueController, provideQuantaContainer } from '@quantajs/lit';
+```
+
+### @quantajs/astro
+An Astro integration: a container per request, server state that reaches the islands, and one store shared by React, Vue and Svelte islands.
+
+```javascript
+import quanta from '@quantajs/astro';
+```
+
 ### @quantajs/devtools
 A framework-agnostic developer overlay (built with Preact + Shadow DOM) for real-time store inspection, action history, and persistence debugging.
 
@@ -69,7 +83,7 @@ import { mountDevTools } from '@quantajs/devtools';
 
 ## What Makes QuantaJS Different
 
-QuantaJS isn't just another library — it's a rebellion against bloated, overcomplicated state management. Born from a desire to simplify without sacrificing power, it's your companion for building smarter, faster, and cleaner code. The modular package architecture means you get exactly what you need — core functionality for any environment, bindings for React, Vue and Svelte, and powerful DevTools for debugging and development.
+QuantaJS isn't just another library — it's a rebellion against bloated, overcomplicated state management. Born from a desire to simplify without sacrificing power, it's your companion for building smarter, faster, and cleaner code. The modular package architecture means you get exactly what you need — core functionality for any environment, bindings for React, Vue, Svelte and Lit, an Astro integration, and powerful DevTools for debugging and development.
 
 ## A Taste of the Magic
 

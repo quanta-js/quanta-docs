@@ -163,6 +163,8 @@ const BINDINGS = [
     { name: "React", href: "/docs/integration/react-integration" },
     { name: "Vue", href: "/docs/integration/vue-integration" },
     { name: "Svelte", href: "/docs/integration/svelte-integration" },
+    { name: "Lit", href: "/docs/integration/lit-integration" },
+    { name: "Astro", href: "/docs/integration/astro-integration" },
 ];
 
 const FACTS = [
@@ -197,8 +199,9 @@ export default function Landing() {
                         <p className="max-w-[32rem] text-lg leading-relaxed text-[var(--dim)]">
                             Write a value and only the code that read it runs — once. Typed
                             stores, async action state, request-scoped containers and
-                            persistence in a framework-free core, with official React,
-                            Vue and Svelte bindings and no runtime dependencies.
+                            persistence in a framework-free core, with official React, Vue,
+                            Svelte and Lit bindings, an Astro integration, and no runtime
+                            dependencies.
                         </p>
                         <div className="flex flex-wrap gap-3">
                             <Link href="/docs/getting-started/quick-start-guide" className={primary}>

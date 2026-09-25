@@ -82,6 +82,7 @@ It is there for the name-based escape hatch and for tooling.
 import {
   getDefaultContainer,
   setDefaultContainer,
+  setDefaultContainerResolver,
   resetDefaultContainer,
   destroyAllStores,
 } from '@quantajs/core';
@@ -91,6 +92,7 @@ import {
 |---|---|
 | `getDefaultContainer()` | The ambient container, creating it if needed. |
 | `setDefaultContainer(c)` | Replace the ambient container. |
+| `setDefaultContainerResolver(fn)` | Decide which container is the default for the code running now, such as the current request's. `null` removes it. |
 | `resetDefaultContainer()` | Dispose the ambient container and forget it. |
 | `destroyAllStores()` | Dispose every store in the ambient container. Handy in test teardown. |
 
@@ -118,6 +120,34 @@ export async function handler(req, res) {
 ```
 
 See the [SSR guide](/docs/guides/ssr) for the client half.
+
+### A request-scoped default container
+
+Passing the container everywhere works until a framework renders components for you: a component calls `useQuanta(definition)` with no container. `setDefaultContainerResolver` lets the server say which container is the default for the code running now, typically read from `AsyncLocalStorage`:
+
+```ts
+import { AsyncLocalStorage } from 'node:async_hooks';
+import {
+  createContainer,
+  setDefaultContainerResolver,
+  type StoreContainer,
+} from '@quantajs/core';
+
+const requests = new AsyncLocalStorage<StoreContainer>();
+setDefaultContainerResolver(() => requests.getStore());
+
+export function handler(req, res) {
+  const container = createContainer(req.id);
+  return requests.run(container, async () => {
+    // Anything in here, including components rendered on the server,
+    // resolves stores against this request's container.
+    await useUserStore().load(req.userId);
+    res.send(page(renderToString(<App />), container.dehydrate()));
+  }).finally(() => container.dispose());
+}
+```
+
+Outside a request the resolver returns `undefined` and the usual default container applies. A resolved container that has been disposed is not replaced with the default: resolving against it throws. The [Astro integration](/docs/integration/astro-integration) sets this up for you.
 
 ### One per test
 
