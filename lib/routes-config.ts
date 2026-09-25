@@ -60,6 +60,8 @@ export const ROUTES: EachRoute[] = [
             { title: "React Integration", href: "/react-integration" },
             { title: "Vue Integration", href: "/vue-integration", tag: "New!" },
             { title: "Svelte Integration", href: "/svelte-integration", tag: "New!" },
+            { title: "Lit Integration", href: "/lit-integration", tag: "New!" },
+            { title: "Astro Integration", href: "/astro-integration", tag: "New!" },
             { title: "Next.js Integration", href: "/nextjs-integration" },
         ],
     },

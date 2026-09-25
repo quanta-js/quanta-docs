@@ -5,9 +5,9 @@ description: What changed from 2.x, and how to update your code.
 
 # Migrating to 3.0
 
-3.0 removes APIs that were deprecated or never meant to be public, types persistence end to end, and fixes how development builds are detected. It also adds official [Vue](/docs/integration/vue-integration) and [Svelte](/docs/integration/svelte-integration) bindings. Stores themselves are unchanged: a `defineStore` definition from 2.x works as it is.
+3.0 removes APIs that were deprecated or never meant to be public, types persistence end to end, and fixes how development builds are detected. It also adds official [Vue](/docs/integration/vue-integration), [Svelte](/docs/integration/svelte-integration) and [Lit](/docs/integration/lit-integration) bindings, and an [Astro integration](/docs/integration/astro-integration). Stores themselves are unchanged: a `defineStore` definition from 2.x works as it is.
 
-All packages now share one version number, so `@quantajs/core`, `@quantajs/react`, `@quantajs/devtools`, `@quantajs/vue` and `@quantajs/svelte` are released together as 3.0.0. Update them together: `@quantajs/react` and `@quantajs/devtools` now require the other QuantaJS packages from the same major.
+All packages now share one version number, so `@quantajs/core`, `@quantajs/react`, `@quantajs/devtools`, `@quantajs/vue`, `@quantajs/svelte`, `@quantajs/lit` and `@quantajs/astro` are released together as 3.0.0. Update them together: `@quantajs/react` and `@quantajs/devtools` now require the other QuantaJS packages from the same major.
 
 ```bash
 npm install @quantajs/core@3 @quantajs/react@3
@@ -155,4 +155,7 @@ Nothing to change in your code.
 ## New in 3.0
 
 - **Vue and Svelte bindings**: [`@quantajs/vue`](/docs/integration/vue-integration) and [`@quantajs/svelte`](/docs/integration/svelte-integration), with the same `useQuanta`, `useQuantaValue`, `useQuantaActions` and `useLocalStore` as React.
+- **Lit bindings**: [`@quantajs/lit`](/docs/integration/lit-integration), the same four as reactive controllers for web components.
+- **Astro integration**: [`@quantajs/astro`](/docs/integration/astro-integration) gives each request its own container, carries server state to the islands, and lets React, Vue and Svelte islands share one store.
+- **`setDefaultContainerResolver`**, for any server that renders components without passing a container: resolve the default container per request, for example from `AsyncLocalStorage`. See [Containers](/docs/api/containers#a-request-scoped-default-container).
 - **`watch` takes `equals`**, to compare a source's values with `shallow` or your own function instead of `Object.is`. See [watch](/docs/api/watch#custom-equality).

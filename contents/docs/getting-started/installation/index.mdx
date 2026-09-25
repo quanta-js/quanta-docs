@@ -5,7 +5,7 @@ description: How to install QuantaJS in your project.
 
 # Installation
 
-QuantaJS is a framework-free core with official bindings for React, Vue and Svelte. Install the core, then the bindings for your framework, if any.
+QuantaJS is a framework-free core with official bindings for React, Vue, Svelte and Lit, and an Astro integration. Install the core, then what your framework needs, if anything.
 
 ## Prerequisites
 
@@ -56,6 +56,28 @@ npm install @quantajs/svelte @quantajs/core
 yarn add @quantajs/svelte @quantajs/core
 # or
 pnpm add @quantajs/svelte @quantajs/core
+```
+
+### @quantajs/lit
+For Lit 2 and 3 web components, through reactive controllers. See [Lit Integration](/docs/integration/lit-integration).
+
+```bash
+npm install @quantajs/lit @quantajs/core
+# or
+yarn add @quantajs/lit @quantajs/core
+# or
+pnpm add @quantajs/lit @quantajs/core
+```
+
+### @quantajs/astro
+For Astro 7: one store shared by React, Vue and Svelte islands, with a container per request. Add the bindings your islands use as well. See [Astro Integration](/docs/integration/astro-integration).
+
+```bash
+npm install @quantajs/astro @quantajs/core
+# or
+yarn add @quantajs/astro @quantajs/core
+# or
+pnpm add @quantajs/astro @quantajs/core
 ```
 
 <Callout type="info">
