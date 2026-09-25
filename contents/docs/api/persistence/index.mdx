@@ -22,6 +22,8 @@ import {
   LocalStorageAdapter,
   SessionStorageAdapter,
   IndexedDBAdapter,
+  CookieAdapter,
+  type CookieAdapterOptions,
   type PersistenceConfig,
   type PersistenceAdapter,
   type PersistedData,
@@ -101,6 +103,23 @@ const adapter = new IndexedDBAdapter('store-key', 'app-db', 'stores', 1);
 
 - Async persistence for larger datasets
 - Better fit for high-volume/local-first workloads
+
+### `CookieAdapter`
+
+```ts
+const adapter = new CookieAdapter('theme', {
+  path: '/',          // default
+  maxAge: 60 * 60 * 24 * 30, // seconds; default 30 days
+  sameSite: 'Lax',    // 'Lax' | 'Strict' | 'None'; default 'Lax'
+  secure: false,      // required when sameSite is 'None'
+  domain: undefined,  // optional
+});
+```
+
+- Uses `document.cookie`, so the value is sent to your server with each request
+- For small state: a write that would make the cookie longer than 4096 bytes throws, as do invalid options and blocked cookie access, and the store reports it through `onError`
+- On the server it reads `null` and writes nothing; read the request's cookies yourself if the server needs the value
+- No cross-tab sync: cookies have no change event
 
 ### Custom adapters
 
