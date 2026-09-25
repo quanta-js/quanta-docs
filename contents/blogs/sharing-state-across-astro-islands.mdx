@@ -1,0 +1,204 @@
+---
+title: "One Store, Every Island: Sharing State Across Astro Islands"
+description: "Astro islands are isolated by design. @quantajs/astro gives each request its own store container, carries server state into the page, and lets React, Vue and Svelte islands share one store."
+date: "26-09-2026"
+authors:
+  - username: "Jeel Gajera"
+    handle: "jeelgajera"
+    handleUrl: "https://github.com/jeelgajera"
+    avatar: "https://avatars.githubusercontent.com/u/83470656?v=4"
+cover: "https://images.pexels.com/photos/19758822/pexels-photo-19758822.jpeg"
+---
+
+# One Store, Every Island
+
+Astro's islands are its best idea. The page is HTML; only the interactive parts
+ship JavaScript, and each one hydrates on its own. You can put a React island
+next to a Vue island next to a Svelte island, and each loads only what it needs.
+
+The cost shows up the moment two islands need the same data. A cart icon in
+the header and an "add to cart" button in the page body are separate apps.
+There is no shared component tree, no provider above them, no context to pass
+down.
+
+`@quantajs/astro`, new in [QuantaJS 3.0](/blogs/announcing-quantajs-3-0-0),
+is our answer to that. This post is about the problem as much as the solution,
+because the problem has three parts, and most setups only solve the first.
+
+---
+
+## Three questions
+
+**1. How do two islands share state?** They need a store that lives outside any
+one framework. Astro's
+[recipe for sharing state](https://docs.astro.build/en/recipes/sharing-state-islands/)
+recommends Nano Stores for this, and it works well.
+
+**2. How does state loaded on the server reach them?** You fetch the user's cart
+in the page's frontmatter. The same recipe is candid here: writing to a store
+from an `.astro` file "will not affect the value received by client-side
+components". The islands start from nothing and fetch again, or you pass props
+to every island by hand.
+
+**3. How do concurrent requests stay apart?** On the server, a store defined at
+module level is one object, shared by every request the process handles. If
+request A writes Ada's cart and request B reads it before A finishes, Bob sees
+Ada's cart. No error, no warning.
+
+QuantaJS already had the pieces for all three: stores that live outside any
+framework, [containers](/docs/api/containers) that isolate one request from
+another, and snapshots that move a container's state from server to browser.
+The Astro integration connects them.
+
+## Setting it up
+
+```bash
+npm install @quantajs/core @quantajs/astro
+```
+
+Add the bindings for the frameworks your islands use (`@quantajs/react`,
+`@quantajs/vue`, `@quantajs/svelte`), then register the integration:
+
+```js
+// astro.config.mjs
+import { defineConfig } from 'astro/config';
+import react from '@astrojs/react';
+import vue from '@astrojs/vue';
+import svelte from '@astrojs/svelte';
+import quanta from '@quantajs/astro';
+
+export default defineConfig({
+  integrations: [quanta(), react(), vue(), svelte()],
+});
+```
+
+Define the store once, in plain TypeScript. Nothing here knows about Astro or
+any framework:
+
+```ts
+// src/stores/cart.ts
+import { defineStore } from '@quantajs/core';
+
+export const useCart = defineStore('cart', {
+  state: () => ({ user: '', items: [] as string[] }),
+  getters: { count: (s) => s.items.length },
+  actions: {
+    async load(user: string) {
+      this.user = user;
+      this.items = await fetchCart(user);
+    },
+    add(item: string) {
+      this.items.push(item);
+    },
+  },
+});
+```
+
+Load it in the page's frontmatter. Calling `useCart()` with no container
+resolves against **this request's** container:
+
+```html
+---
+// src/pages/cart.astro
+import { useCart } from '../stores/cart';
+import ReactCart from '../components/ReactCart';
+import VueBadge from '../components/VueBadge.vue';
+import SvelteTotal from '../components/SvelteTotal.svelte';
+
+await useCart().load(Astro.locals.user); // set by your auth middleware
+---
+
+<header><VueBadge client:load /></header>
+<main><ReactCart client:load /></main>
+<aside><SvelteTotal client:idle /></aside>
+```
+
+Each island uses its own framework's binding, with no provider and no props:
+
+```tsx
+// src/components/ReactCart.tsx
+import { useQuantaActions, useQuantaValue } from '@quantajs/react';
+import { useCart } from '../stores/cart';
+
+export default function ReactCart() {
+  const items = useQuantaValue(useCart, (s) => s.items);
+  const cart = useQuantaActions(useCart);
+  return (
+    <>
+      <ul>{items.map((item) => <li key={item}>{item}</li>)}</ul>
+      <button onClick={() => cart.add('tea')}>Add tea</button>
+    </>
+  );
+}
+```
+
+```html
+<!-- src/components/VueBadge.vue -->
+<script setup lang="ts">
+import { useQuantaValue } from '@quantajs/vue';
+import { useCart } from '../stores/cart';
+
+const count = useQuantaValue(useCart, (s) => s.count);
+</script>
+
+<template><span class="badge">{{ count }}</span></template>
+```
+
+Click "Add tea" in the React island and the Vue badge updates. So does the
+Svelte island. On first paint, all three already show the cart loaded on the
+server, with no second fetch.
+
+---
+
+## What happens on a request
+
+1. **A container per request.** The integration adds middleware that runs
+   first. It creates a container for the request, puts it on
+   `Astro.locals.quanta`, and makes it the default container for everything
+   that runs while the request renders. That uses Node's `AsyncLocalStorage`
+   and 3.0's `setDefaultContainerResolver`, so even deeply nested code gets the
+   right container without anyone passing it along.
+2. **The state goes into the page.** As `</head>` streams out, by which point
+   the frontmatter has run, the middleware writes the container's state into a
+   small script. It is serialised with `devalue`, so `Date`, `Map` and `Set`
+   survive, and no value can break out of the script tag.
+3. **The browser adopts it before any island hydrates.** Astro runs the
+   integration's client script before hydration. It applies the snapshot to the
+   browser's default container, which every island, whatever its framework,
+   resolves against.
+4. **The server cleans up.** The request's container is disposed once the page
+   has been sent.
+
+With view transitions, each new page's snapshot is applied as it arrives, so
+navigating between pages carries the right state along. Prerendered pages
+carry the state from build time.
+
+## How we know requests stay apart
+
+The [example app](https://github.com/quanta-js/quanta/tree/master/examples/astro)
+has React, Vue and Svelte islands sharing one cart, and CI runs it on every
+pull request. It builds the server, then requests the page for two users at the
+same time, timed so that the first request to start is the last to finish,
+which is when shared state would leak. Each page's islands, snapshot and
+cookies must show only its own user.
+
+The same check confirms the browser build contains exactly one copy of the
+store runtime. That is what lets islands from three frameworks share one store:
+they all import the same `@quantajs/core`.
+
+## Things to know
+
+- **Load state before `<head>` is sent**: in middleware, or in the frontmatter
+  of the page or its layout. Anything written while the page body renders, after
+  the head, is not in the snapshot.
+- **The server needs `AsyncLocalStorage`.** Node, Deno and Bun have it; on
+  Cloudflare, enable `nodejs_compat`.
+- **API routes** get a container too, and their responses pass through
+  unchanged.
+
+## Try it
+
+- [Astro integration guide](/docs/integration/astro-integration)
+- [The example app](https://github.com/quanta-js/quanta/tree/master/examples/astro)
+- [Containers](/docs/api/containers) and
+  [server-side rendering](/docs/guides/ssr), for the model underneath

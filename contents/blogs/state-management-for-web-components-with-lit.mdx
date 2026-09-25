@@ -1,0 +1,225 @@
+---
+title: "State Management for Web Components: QuantaJS Meets Lit"
+description: "@quantajs/lit brings typed stores to Lit elements as reactive controllers: fine-grained updates, containers scoped through the context protocol, and the same stores your React or Vue code already uses."
+date: "26-09-2026"
+authors:
+  - username: "Jeel Gajera"
+    handle: "jeelgajera"
+    handleUrl: "https://github.com/jeelgajera"
+    avatar: "https://avatars.githubusercontent.com/u/83470656?v=4"
+cover: "https://images.pexels.com/photos/10196790/pexels-photo-10196790.jpeg"
+---
+
+# State Management for Web Components
+
+Web components are the most portable UI you can ship. A custom element works in
+a React app, a Vue app, a server-rendered page or a CMS template, and it keeps
+working when the framework around it changes. Lit is the most common way to
+write them.
+
+Lit covers two kinds of state well. Reactive properties handle an element's own
+state, and `@lit/context` passes values down a tree of elements. Shared
+application state, the kind a cart, a session or a set of filters needs, is
+where it gets thinner. Lit's
+[signals integration](https://lit.dev/docs/data/signals/) is promising, but it
+lives in Lit Labs and is marked experimental, with breaking changes expected as
+the underlying TC39 proposal evolves.
+
+`@quantajs/lit`, new in [QuantaJS 3.0](/blogs/announcing-quantajs-3-0-0),
+brings QuantaJS stores to Lit. It is a stable release, typed end to end, and
+uses the same store definitions as the React, Vue and Svelte bindings.
+
+---
+
+## Why controllers
+
+Lit has a built-in pattern for exactly this:
+[reactive controllers](https://lit.dev/docs/composition/controllers/). A
+controller attaches to an element, learns when it connects and disconnects, and
+can ask it to update. That maps one-to-one onto a store subscription:
+
+| Element lifecycle | What the controller does |
+|---|---|
+| Connected | Subscribes to what it reads |
+| The store changes | Calls `requestUpdate()`, if its value changed |
+| Disconnected | Unsubscribes |
+
+No base class, no mixin and no decorators. You compose controllers as fields,
+so one element can read from several stores.
+
+## A store and an element
+
+The store is plain TypeScript, with nothing Lit-specific in it:
+
+```ts
+// stores/todos.ts
+import { defineStore } from '@quantajs/core';
+
+export const useTodos = defineStore('todos', {
+  state: () => ({ items: [] as { text: string; done: boolean }[] }),
+  getters: {
+    remaining: (s) => s.items.filter((t) => !t.done).length,
+  },
+  actions: {
+    add(text: string) {
+      this.items.push({ text, done: false });
+    },
+    toggle(index: number) {
+      this.items[index].done = !this.items[index].done;
+    },
+  },
+});
+```
+
+```ts
+// todo-app.ts
+import { LitElement, html } from 'lit';
+import {
+  QuantaActionsController,
+  QuantaController,
+  QuantaValueController,
+} from '@quantajs/lit';
+import { useTodos } from './stores/todos';
+
+export class TodoApp extends LitElement {
+  // Updates this element only when `remaining` changes.
+  private remaining = new QuantaValueController(this, useTodos, (s) => s.remaining);
+
+  // Updates on any change to the store.
+  private todos = new QuantaController(this, useTodos);
+
+  // The store without a subscription, for calling actions.
+  private actions = new QuantaActionsController(this, useTodos);
+
+  render() {
+    return html`
+      <p>${this.remaining.value} left</p>
+      <ul>
+        ${this.todos.store.items.map(
+          (t, i) => html`<li @click=${() => this.actions.store.toggle(i)}>
+            ${t.done ? '✓' : '○'} ${t.text}
+          </li>`,
+        )}
+      </ul>
+      <button @click=${() => this.actions.store.add('New todo')}>Add</button>
+    `;
+  }
+}
+customElements.define('todo-app', TodoApp);
+```
+
+There is no setup step. In a browser app, stores resolve against a default
+container.
+
+## Update only what changed
+
+`QuantaValueController` is the one to reach for first. Its selector runs inside
+QuantaJS's own dependency tracking, so the element updates when the state the
+selector read changes, including an array or object mutated in place, and not
+otherwise. Toggling a todo updates a `remaining` counter; editing a todo's text
+does not.
+
+A selector that builds a new object each time would count as a change on every
+run. Pass `shallow` to compare its fields instead:
+
+```ts
+import { LitElement } from 'lit';
+import { shallow, QuantaValueController } from '@quantajs/lit';
+import { useTodos } from './stores/todos';
+
+export class TodoSummary extends LitElement {
+  private summary = new QuantaValueController(
+    this,
+    useTodos,
+    (s) => ({ remaining: s.remaining, total: s.items.length }),
+    { equalityFn: shallow },
+  );
+}
+```
+
+## Scoping state to a subtree
+
+Sometimes a part of the page needs its own copy of a store: two independent
+checkout widgets, or a component library's demo page that renders the same
+element in several states. `provideQuantaContainer` gives an element's subtree
+its own container:
+
+```ts
+import { LitElement } from 'lit';
+import { provideQuantaContainer } from '@quantajs/lit';
+
+export class CheckoutWidget extends LitElement {
+  constructor() {
+    super();
+    // Created here; disposed when the element is removed.
+    provideQuantaContainer(this);
+  }
+}
+```
+
+Every controller below it, including inside shadow roots, resolves against that
+container. It works through the
+[web components context protocol](https://github.com/webcomponents-cg/community-protocols/blob/main/proposals/context.md),
+the same one `@lit/context` implements, so an `@lit/context` provider for
+`quantaContainerContext` works as well.
+
+For state that belongs to one element, `QuantaLocalController` gives it a store
+of its own. It survives the element being moved in the DOM, as happens when you
+sort a list, because disposal waits to see whether the element comes back.
+
+## The part we like most
+
+A web component rarely lives alone. It sits inside a React or Vue app, or in
+an Astro page next to islands from other frameworks. Because the store is the
+same QuantaJS store everywhere, a Lit `<cart-badge>` and a React checkout page
+can read and change the same cart:
+
+```tsx
+// The React checkout page
+import { useQuantaActions } from '@quantajs/react';
+import { useCart } from './stores/cart';
+
+export function AddToCart({ item }: { item: string }) {
+  const cart = useQuantaActions(useCart);
+  return <button onClick={() => cart.add(item)}>Add to cart</button>;
+}
+```
+
+```ts
+// The Lit badge in the site header: updates when React adds an item
+import { LitElement, html } from 'lit';
+import { QuantaValueController } from '@quantajs/lit';
+import { useCart } from './stores/cart';
+
+export class CartBadge extends LitElement {
+  private count = new QuantaValueController(this, useCart, (s) => s.items.length);
+
+  render() {
+    return html`<span class="badge">${this.count.value}</span>`;
+  }
+}
+customElements.define('cart-badge', CartBadge);
+```
+
+They share state as long as they share one copy of `@quantajs/core`: the same
+bundle, or the same dependency in a monorepo.
+
+## Numbers
+
+- **Lit 2 and 3.** CI runs the test suite against Lit 2 as well as the current
+  release.
+- **9.1 KB gzip** for `defineStore` plus the two main controllers, in a
+  production build. Lit itself is a peer dependency.
+- The [example app](https://github.com/quanta-js/quanta/tree/master/examples/lit-vite)
+  uses every controller and a provided container, and CI builds and checks it
+  on every pull request.
+
+## Try it
+
+```bash
+npm install @quantajs/core @quantajs/lit
+```
+
+- [Lit integration guide](/docs/integration/lit-integration)
+- [The example app](https://github.com/quanta-js/quanta/tree/master/examples/lit-vite)
+- [defineStore](/docs/api/define-store), for everything a store can do
