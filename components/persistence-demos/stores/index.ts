@@ -276,9 +276,10 @@ export const appStateStore = createStore(
             transform: {
                 out: (data) => {
                     // Prune old completed tasks if >50 (demo cleanup)
-                    if (data.tasks?.length > 50) {
-                        data.tasks = data.tasks
-                            .filter((t: any) => !t.completed)
+                    const tasks = data.tasks;
+                    if (tasks && tasks.length > 50) {
+                        data.tasks = tasks
+                            .filter((t) => !t.completed)
                             .slice(0, 50);
                     }
                     return data;
