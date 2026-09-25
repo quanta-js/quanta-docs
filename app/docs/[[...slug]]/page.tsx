@@ -6,7 +6,8 @@ import { notFound } from "next/navigation";
 import { getDocsForSlug } from "@/lib/markdown";
 import { Typography } from "@/components/typography";
 import { CopyButton } from "@/components/CopyButton";
-import { Pencil } from "lucide-react";
+import { Github } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { StructuredData, generateArticleStructuredData } from "@/components/structured-data";
 
 type PageProps = {
@@ -48,16 +49,27 @@ export default async function DocsPage(props: PageProps) {
               {res.frontmatter.description}
             </p> */}
             <div>{res.content}</div>
-            <div className="mt-10 border-t pt-4">
-              <a
+            <div className="mt-10 flex items-center justify-between gap-4 border-t pt-5">
+              <p className="text-xs text-muted-foreground">
+                Spot something that needs improving?
+              </p>
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="shrink-0 gap-2 bg-background/50 text-xs shadow-sm hover:border-foreground/30 hover:bg-accent"
+              >
+                <a
                 href={editUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-2 text-sm text-muted-foreground no-underline transition-colors hover:text-foreground"
-              >
-                <Pencil className="h-4 w-4" aria-hidden="true" />
-                Edit this page on GitHub
-              </a>
+                aria-label="Edit this page on GitHub"
+                >
+                  <Github className="h-4 w-4" aria-hidden="true" />
+                  <span className="hidden sm:inline">Edit on GitHub</span>
+                  <span className="sm:hidden">Edit page</span>
+                </a>
+              </Button>
             </div>
             <Pagination pathname={pathName} />
           </Typography>
