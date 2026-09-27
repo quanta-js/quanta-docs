@@ -118,6 +118,14 @@ export default function QuantaField({
         };
 
         const paintStatic = () => {
+            if (
+                canvas.width === 0 ||
+                canvas.height === 0 ||
+                staticLayer.width === 0 ||
+                staticLayer.height === 0
+            ) {
+                return;
+            }
             ctx.setTransform(1, 0, 0, 1, 0, 0);
             ctx.drawImage(staticLayer, 0, 0);
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -128,6 +136,19 @@ export default function QuantaField({
             width = rect.width;
             height = rect.height;
             dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+            if (width <= 0 || height <= 0) {
+                cols = 0;
+                rows = 0;
+                canvas.width = 0;
+                canvas.height = 0;
+                staticLayer.width = 0;
+                staticLayer.height = 0;
+                active.clear();
+                targeted.clear();
+                return;
+            }
+
             pitch = width < 640 ? 20 : 24;
             size = Math.round(pitch * 0.56);
             cols = Math.ceil(width / pitch) + 1;
@@ -304,6 +325,7 @@ export default function QuantaField({
         };
 
         const emit = (cx: number, cy: number) => {
+            if (cols === 0 || rows === 0) return;
             waves.push({ cx, cy, start: performance.now(), last: -1 });
             kick();
         };
