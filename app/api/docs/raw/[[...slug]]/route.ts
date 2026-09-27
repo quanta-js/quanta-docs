@@ -16,7 +16,7 @@ export async function GET(
   return new NextResponse(rawMdx, {
     status: 200,
     headers: {
-      "Content-Type": "text/plain",
+      "Content-Type": "text/markdown; charset=utf-8",
     },
   });
 }
