@@ -10,355 +10,371 @@ authors:
 cover: "https://images.pexels.com/photos/16747785/pexels-photo-16747785.jpeg"
 ---
 
-
 # Persistence in Real-World Projects: A Practical Guide
 
-<Note type="warning" title="Written for QuantaJS 2.0">
-The code in this post uses the 2.0 API. `useStore`, `useStoreSelector` and
-`useCreateStore` were removed from `@quantajs/react` in 2.1, and
-`<QuantaProvider>` no longer takes a `stores` prop. See the
-[2.1 migration guide](/docs/getting-started/migration-2-1) for the current
-equivalents.
-</Note>
-
-
-Ever wondered how your favorite apps remember your preferences, shopping cart items, or form data even after you close the browser? That's persistence in action! Today, we'll explore how QuantaJS makes this magic happen with real-world examples you can actually try.
-
-## What is Persistence?
-
-Persistence is the ability to save and restore your application's state automatically. Think of it like a smart memory system that remembers everything important about your app, even when the user refreshes the page or closes the browser.
+Persistence is the ability to save selected store state and restore it later. In QuantaJS 3.x, persistence is configured on a `defineStore` definition, so the same definition can resolve into the right container in a browser, a component-local scope, or a server request.
 
 ## Real-World Scenarios
 
-Let's look at some everyday situations where persistence makes a huge difference:
+### 1. User Preferences
 
-### 1. User Preferences Store
+```ts
+import { defineStore, LocalStorageAdapter } from '@quantajs/core';
 
-Imagine you're building a productivity app. Users want their theme, language, and notification settings to persist across sessions.
-
-```javascript
-import { createStore, LocalStorageAdapter } from '@quantajs/core';
-
-const userPreferencesStore = createStore('user-preferences', {
+export const usePreferencesStore = defineStore('user-preferences', {
   state: () => ({
-    theme: 'light',
+    theme: 'light' as 'light' | 'dark',
     language: 'en',
     notifications: true,
-    fontSize: 'medium'
   }),
   actions: {
-    updateTheme(theme) {
+    setTheme(theme: 'light' | 'dark') {
       this.theme = theme;
     },
-    updateLanguage(lang) {
-      this.language = lang;
+    setLanguage(language: string) {
+      this.language = language;
     },
-    toggleNotifications() {
-      this.notifications = !this.notifications;
-    }
   },
   persist: {
     adapter: new LocalStorageAdapter('user-preferences'),
-    debounceMs: 300
-  }
+    include: ['theme', 'language', 'notifications'],
+    debounceMs: 300,
+  },
 });
 ```
 
-**Try it yourself:** Change the theme below and refresh the page!
+A React component can subscribe only to the persisted value it renders:
 
-### 2. Shopping Cart Persistence
+```tsx
+import { useQuantaActions, useQuantaValue } from '@quantajs/react';
 
-E-commerce apps need to remember what users have in their cart, even if they accidentally close the browser.
+function ThemePicker() {
+  const theme = useQuantaValue(usePreferencesStore, (state) => state.theme);
+  const preferences = useQuantaActions(usePreferencesStore);
 
-```javascript
-const shoppingCartStore = createStore('shopping-cart', {
+  return (
+    <button onClick={() => preferences.setTheme(theme === 'light' ? 'dark' : 'light')}>
+      Theme: {theme}
+    </button>
+  );
+}
+```
+
+### 2. Shopping Cart
+
+```ts
+const useCartStore = defineStore('shopping-cart', {
   state: () => ({
-    items: [],
-    total: 0
+    items: [] as Array<{ id: string; price: number; quantity: number }>,
   }),
   getters: {
-    itemCount: (state) => state.items.length,
-    isEmpty: (state) => state.items.length === 0
+    total: (state) =>
+      state.items.reduce((sum, item) => sum + item.price * item.quantity, 0),
   },
   actions: {
-    addItem(product) {
-      const existingItem = this.items.find(item => item.id === product.id);
-      if (existingItem) {
-        existingItem.quantity += 1;
-      } else {
-        this.items.push({ ...product, quantity: 1 });
-      }
-      this.updateTotal();
+    addItem(item: { id: string; price: number }) {
+      const current = this.items.find((entry) => entry.id === item.id);
+      if (current) current.quantity++;
+      else this.items.push({ ...item, quantity: 1 });
     },
-    removeItem(productId) {
-      this.items = this.items.filter(item => item.id !== productId);
-      this.updateTotal();
-    },
-    updateQuantity(productId, quantity) {
-      const item = this.items.find(item => item.id === productId);
-      if (item) {
-        item.quantity = Math.max(0, quantity);
-        if (item.quantity === 0) {
-          this.removeItem(productId);
-        } else {
-          this.updateTotal();
-        }
-      }
-    },
-    updateTotal() {
-      this.total = this.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    },
-    clearCart() {
+    clear() {
       this.items = [];
-      this.total = 0;
-    }
+    },
   },
   persist: {
     adapter: new LocalStorageAdapter('shopping-cart'),
+    include: ['items'],
     debounceMs: 500,
-    include: ['items', 'total']
-  }
+  },
 });
 ```
 
-**Try it yourself:** Add items to your cart and refresh the page!
+Derived values such as `total` do not need their own persisted field; they can be recomputed from persisted state.
 
-### 3. Multi-Step Form Persistence
+### 3. Multi-Step Form Draft
 
-Complex forms with multiple steps can be frustrating if users lose their progress.
+A draft often belongs to one mounted form rather than the entire application. Keep the definition at module scope and use `useLocalStore` for component ownership:
 
-```javascript
-const formStore = createStore('contact-form', {
+```tsx
+import { defineStore, LocalStorageAdapter } from '@quantajs/core';
+import { useLocalStore } from '@quantajs/react';
+
+const useFormDraftStore = defineStore('contact-form-draft', {
   state: () => ({
     name: '',
     email: '',
     message: '',
-    step: 1
+    step: 1,
   }),
   actions: {
-    updateField(field, value) {
-      this[field] = value;
-    },
     nextStep() {
       if (this.step < 3) this.step++;
     },
-    prevStep() {
-      if (this.step > 1) this.step--;
-    },
-    resetForm() {
-      this.name = '';
-      this.email = '';
-      this.message = '';
-      this.step = 1;
-    }
   },
   persist: {
-    adapter: new LocalStorageAdapter('contact-form'),
-    debounceMs: 100,
-    transform: {
-      out: (data) => {
-        // Don't save empty fields
-        const cleanData = {};
-        Object.entries(data).forEach(([key, value]) => {
-          if (value !== '' && value !== null && value !== undefined) {
-            cleanData[key] = value;
-          }
-        });
-        return cleanData;
-      }
-    }
-  }
+    adapter: new LocalStorageAdapter('contact-form-draft'),
+    debounceMs: 150,
+  },
 });
+
+function ContactForm() {
+  const form = useLocalStore(useFormDraftStore);
+  return <button onClick={() => form.nextStep()}>Step {form.step}</button>;
+}
 ```
 
-**Try it yourself:** Fill out the form steps and refresh the page!
+### 4. Application View State
 
-### 4. Application State Persistence
+Persist durable preferences, not short-lived request or cache state:
 
-Complex applications need to remember user preferences, filters, and view states.
-
-```javascript
-const appStateStore = createStore('app-state', {
+```ts
+const useAppStateStore = defineStore('app-state', {
   state: () => ({
     currentView: 'dashboard',
-    filters: {
-      category: 'all',
-      status: 'active',
-      dateRange: 'week'
-    },
-    pagination: {
-      page: 1,
-      pageSize: 10
-    },
-    sidebarCollapsed: false
+    filters: { category: 'all', status: 'active' },
+    sidebarCollapsed: false,
+    temporaryResults: [] as string[],
   }),
-  actions: {
-    setView(view) {
-      this.currentView = view;
-    },
-    updateFilters(newFilters) {
-      this.filters = { ...this.filters, ...newFilters };
-      this.pagination.page = 1; // Reset to first page when filters change
-    },
-    setPage(page) {
-      this.pagination.page = page;
-    },
-    toggleSidebar() {
-      this.sidebarCollapsed = !this.sidebarCollapsed;
-    }
-  },
   persist: {
     adapter: new LocalStorageAdapter('app-state'),
+    include: ['currentView', 'filters', 'sidebarCollapsed'],
     debounceMs: 200,
-    exclude: ['pagination'] // Don't persist pagination for better UX
-  }
-});
-```
-
-**Try it yourself:** Change the view, filters, or sidebar state and refresh!
-
-### 5. Cross-Tab Synchronization
-
-Modern apps need to stay in sync across multiple browser tabs.
-
-```javascript
-const crossTabStore = createStore('cross-tab-demo', {
-  state: () => ({
-    lastUpdated: new Date().toLocaleTimeString(),
-    tabCount: 1
-  }),
-  actions: {
-    updateTimestamp() {
-      this.lastUpdated = new Date().toLocaleTimeString();
-      this.tabCount++;
-    }
   },
-  persist: {
-    adapter: new LocalStorageAdapter('cross-tab-demo'),
-    debounceMs: 100
-  }
 });
 ```
 
-**Try it yourself:** Open this page in multiple tabs and watch them sync!
+### 5. State the Server Also Needs: CookieAdapter
+
+QuantaJS 3.x adds `CookieAdapter`. Use it for small state the server should receive with the next request, such as a theme or locale:
+
+```ts
+import { CookieAdapter, defineStore } from '@quantajs/core';
+
+export const useLocaleStore = defineStore('locale', {
+  state: () => ({
+    locale: 'en',
+    recentSearches: [] as string[],
+  }),
+  persist: {
+    adapter: new CookieAdapter('locale', {
+      maxAge: 60 * 60 * 24 * 365,
+    }),
+    include: ['locale'],
+  },
+});
+```
+
+Cookies travel with every request and have a small size limit, so keep this state intentionally tiny.
 
 ## Interactive Demos
 
-Now let's see these concepts in action! Below are real, working examples of QuantaJS persistence:
+The interactive examples below use the current QuantaJS persistence implementation:
+
 <PersistenceDemosWrapper />
 
+## Choosing an Adapter
 
-## Key Benefits of QuantaJS Persistence
+QuantaJS provides adapters for different lifetimes and data sizes:
 
-### 🚀 **Performance Optimized**
-- **Debounced Saves**: Prevents excessive storage operations
-- **Selective Persistence**: Only save what you need
-- **Efficient Updates**: Minimal re-renders and storage writes
+- **LocalStorageAdapter** — durable browser preferences and small application state.
+- **SessionStorageAdapter** — state that should disappear with the browser session.
+- **IndexedDBAdapter** — larger browser-side datasets.
+- **CookieAdapter** — small values the server also needs to read.
 
-### 🛡️ **Developer Friendly**
-- **Simple API**: Just add `persist` to your store configuration
-- **Type Safe**: Full TypeScript support
-- **Flexible**: Multiple storage adapters and configuration options
+Choose the narrowest storage mechanism that matches the state rather than persisting everything by default.
 
-### 🔄 **Production Ready**
-- **Error Handling**: Built-in error recovery and validation
-- **Migration Support**: Handle schema changes gracefully
-- **Cross-Tab Sync**: Automatic synchronization across browser tabs
+## Selective Persistence
 
-## Best Practices
-
-### 1. **Choose the Right Storage Adapter**
-- **LocalStorage**: Good for small amounts of data, simple apps
-- **SessionStorage**: Perfect for temporary session data
-- **IndexedDB**: Best for large datasets and complex applications
-
-### 2. **Optimize with Debouncing**
-```javascript
-persist: {
-  adapter: new LocalStorageAdapter('my-store'),
-  debounceMs: 300 // Save after 300ms of inactivity
-}
-```
-
-### 3. **Use Selective Persistence**
-```javascript
-persist: {
-  include: ['important', 'user', 'settings'], // Only persist these fields
-  exclude: ['temporary', 'cache', 'pagination'] // Don't persist these
-}
-```
-
-### 4. **Transform Data When Needed**
-```javascript
-persist: {
-  transform: {
-    out: (data) => cleanData(data), // Clean before saving
-    in: (data) => validateData(data) // Validate after loading
-  }
-}
-```
-
-### 5. **Handle Errors Gracefully**
-```javascript
-persist: {
-  onError: (error, operation) => {
-    console.error(`Persistence ${operation} failed:`, error);
-    // Fallback to default values or show user notification
-  }
-}
-```
-
-## Real-World Use Cases
-
-### **E-commerce Applications**
-- Shopping cart persistence
-- User preferences and filters
-- Recently viewed products
-- Wishlist management
-
-### **Productivity Tools**
-- Form progress and drafts
-- User settings and preferences
-- Workspace layouts and configurations
-- Recent documents and projects
-
-### **Gaming Applications**
-- Game progress and achievements
-- User preferences and controls
-- High scores and statistics
-- Custom configurations
-
-### **Social Media Platforms**
-- User preferences and privacy settings
-- Feed filters and sorting options
-- Draft posts and comments
-- Notification preferences
-
-## Getting Started
-
-Ready to add persistence to your QuantaJS stores? It's as simple as adding a `persist` configuration:
-
-```javascript
-import { createStore, LocalStorageAdapter } from '@quantajs/core';
-
-const myStore = createStore('my-store', {
+```ts
+const useWorkspaceStore = defineStore('workspace', {
   state: () => ({
-    // Your state here
+    user: null as { id: string; name: string } | null,
+    settings: { theme: 'light' },
+    temporaryData: [] as string[],
+    analyticsBuffer: [] as unknown[],
   }),
-  actions: {
-    // Your actions here
-  },
   persist: {
-    adapter: new LocalStorageAdapter('my-store'),
-    debounceMs: 300
+    adapter: new LocalStorageAdapter('workspace'),
+    include: ['user', 'settings'],
+  },
+});
+```
+
+Persisting less data makes migrations simpler and reduces storage writes.
+
+## Debouncing Writes
+
+```ts
+const useEditorStore = defineStore('editor', {
+  state: () => ({ draft: '' }),
+  persist: {
+    adapter: new LocalStorageAdapter('editor'),
+    debounceMs: 500,
+  },
+});
+```
+
+Rapid edits are coalesced instead of writing storage after every keystroke.
+
+## Schema Migrations
+
+Persisted state outlives individual releases, so version schema changes explicitly:
+
+```ts
+const useSettingsStore = defineStore('settings', {
+  state: () => ({
+    theme: 'light',
+    language: 'en',
+    notifications: true,
+  }),
+  persist: {
+    adapter: new LocalStorageAdapter('settings'),
+    version: 3,
+    migrations: {
+      2: (data) => ({
+        ...data,
+        language: data.language ?? 'en',
+      }),
+      3: (data) => ({
+        ...data,
+        notifications: data.notifications ?? true,
+      }),
+    },
+  },
+});
+```
+
+Each migration receives the previous stored data and returns the next shape.
+
+## Validation and Error Handling
+
+Use a validator when stale or externally modified data must not enter your store:
+
+```ts
+const useSessionStore = defineStore('session', {
+  state: () => ({
+    user: null as null | { id: string },
+  }),
+  persist: {
+    adapter: new LocalStorageAdapter('session'),
+    validator: (data) =>
+      data.user === null || typeof data.user?.id === 'string',
+    onError: (error, operation) => {
+      console.error(`Persistence ${operation} failed`, error);
+    },
+  },
+});
+```
+
+If restoration fails, the store keeps its defaults instead of making persistence failure fatal to the application.
+
+## Waiting for Hydration
+
+A persisted store exposes `$hydrated`:
+
+```ts
+const store = useSettingsStore();
+await store.$hydrated;
+console.log(store.theme);
+```
+
+The promise resolves when restoration has finished. It also resolves immediately for a store without persistence, so calling code does not need a separate branch.
+
+In React, resolve the same definition through `useQuanta` or `useQuantaValue` rather than calling it against the ambient container inside a component.
+
+## Cross-Tab Synchronization
+
+`LocalStorageAdapter` can synchronize changes through browser storage events. This is useful for preferences such as theme or authentication-adjacent UI state that should remain consistent across tabs.
+
+Do not assume every adapter has the same synchronization semantics: session storage is tab-scoped, and IndexedDB does not provide LocalStorage-style events automatically.
+
+## Server Rendering
+
+Storage adapters are safe to construct in server-rendered modules. For user-specific server state, still follow the QuantaJS container rule: create a container per request and resolve store definitions against that container.
+
+```ts
+import { createContainer } from '@quantajs/core';
+
+export async function loadRequestState() {
+  const container = createContainer();
+
+  try {
+    const settings = useSettingsStore(container);
+    await settings.$hydrated;
+    return container.dehydrate();
+  } finally {
+    container.dispose();
+  }
+}
+```
+
+Never rely on one process-wide ambient store for request-specific data.
+
+## Testing Persistence
+
+Keep tests isolated by creating a fresh container or local store for each case, and use a fake adapter when you want deterministic storage behavior.
+
+```ts
+import { createContainer } from '@quantajs/core';
+
+test('updates persisted settings', async () => {
+  const container = createContainer();
+
+  try {
+    const settings = useSettingsStore(container);
+    await settings.$hydrated;
+
+    settings.theme = 'dark';
+    await settings.$persist?.save();
+
+    expect(settings.theme).toBe('dark');
+  } finally {
+    container.dispose();
   }
 });
 ```
 
+## Best Practices
+
+- Persist only state that needs to survive its normal lifecycle.
+- Use `include` or `exclude` instead of saving caches and transient data.
+- Debounce write-heavy state such as drafts.
+- Version persisted schemas and add migrations before changing their shape.
+- Validate data that may be stale or user-modified.
+- Use `CookieAdapter` only for small values the server needs.
+- Keep store definitions at module scope.
+- Use `useQuantaValue` for narrow React subscriptions.
+- Use `useQuantaActions` for dispatch-only components.
+- Use `useLocalStore` for component-owned stores.
+- Create a container per server request.
+
+## Getting Started
+
+A minimal durable store in QuantaJS 3.x is only a definition plus a persistence adapter:
+
+```ts
+import { defineStore, LocalStorageAdapter } from '@quantajs/core';
+
+export const useMyStore = defineStore('my-store', {
+  state: () => ({
+    value: '',
+  }),
+  persist: {
+    adapter: new LocalStorageAdapter('my-store'),
+    debounceMs: 300,
+  },
+});
+```
+
+## Learn More
+
+- [Persistence API](/docs/api/persistence)
+- [Persistence Guide](/docs/guides/persistence)
+- [Managing Stores](/docs/guides/managing-stores)
+- [Migrating to 3.0](/docs/getting-started/migration)
+
 ## Conclusion
 
-Persistence is a game-changer for user experience. With QuantaJS, implementing robust persistence is straightforward and performant. The interactive demos above show real-world scenarios where persistence makes a significant difference.
+QuantaJS 3.x persistence works best when storage ownership is explicit: define the store once, resolve it in the correct container, and persist only the state that must outlive that container.
 
-Try out the demos, experiment with different configurations, and see how QuantaJS can transform your application's user experience. Remember, the best persistence strategy is one that's invisible to users but makes their experience seamless and delightful.
-
-Happy coding! 🚀
+That keeps browser state durable without making persistence the source of truth for everything in the application.
