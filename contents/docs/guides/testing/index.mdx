@@ -1,0 +1,327 @@
+---
+title: Testing
+description: Test QuantaJS 3.x stores, async actions, persistence, and React components with isolated containers.
+---
+
+# Testing QuantaJS 3.x
+
+The main rule for tests is simple: **create a fresh container for every test**.
+A container owns the store instances resolved inside it, so state, watchers, and
+persistence subscriptions cannot leak into another test.
+
+```ts
+import { afterEach, beforeEach, expect, test } from 'vitest';
+import { createContainer, defineStore, type StoreContainer } from '@quantajs/core';
+
+const useCounterStore = defineStore('counter', {
+  state: () => ({ count: 0 }),
+  getters: {
+    doubled: (state) => state.count * 2,
+  },
+  actions: {
+    increment() {
+      this.count += 1;
+    },
+  },
+});
+
+let container: StoreContainer;
+
+beforeEach(() => {
+  container = createContainer();
+});
+
+afterEach(() => {
+  container.dispose();
+});
+
+test('actions and getters use isolated state', () => {
+  const counter = useCounterStore(container);
+
+  counter.increment();
+
+  expect(counter.count).toBe(1);
+  expect(counter.doubled).toBe(2);
+});
+```
+
+This replaces the shared-store reset patterns used by QuantaJS 2.x tests.
+
+## Test isolation
+
+Two containers resolve two independent instances of the same definition:
+
+```ts
+test('containers do not share state', () => {
+  const first = createContainer();
+  const second = createContainer();
+
+  try {
+    const a = useCounterStore(first);
+    const b = useCounterStore(second);
+
+    a.increment();
+
+    expect(a.count).toBe(1);
+    expect(b.count).toBe(0);
+  } finally {
+    first.dispose();
+    second.dispose();
+  }
+});
+```
+
+Prefer this over the ambient container in tests. The explicit container makes
+the isolation boundary visible and disposal tears down effects and
+subscriptions.
+
+## Async actions
+
+Every action exposes reactive `pending` and `error` state. Async actions also
+receive a per-call `this.$signal` that can be aborted.
+
+```ts
+import { expect, test, vi } from 'vitest';
+import { createContainer, defineStore } from '@quantajs/core';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+test('pending stays true until an async action settles', async () => {
+  const request = deferred<string>();
+  const useProfileStore = defineStore('profile', {
+    state: () => ({ name: '' }),
+    actions: {
+      async load() {
+        this.name = await request.promise;
+      },
+    },
+  });
+  const container = createContainer();
+
+  try {
+    const profile = useProfileStore(container);
+    const run = profile.load();
+
+    expect(profile.load.pending).toBe(true);
+
+    request.resolve('Ada');
+    await run;
+
+    expect(profile.name).toBe('Ada');
+    expect(profile.load.pending).toBe(false);
+    expect(profile.load.error).toBeNull();
+  } finally {
+    container.dispose();
+  }
+});
+```
+
+Failures are recorded and still reject to the caller:
+
+```ts
+test('async action exposes its latest error', async () => {
+  const useSaveStore = defineStore('save', {
+    state: () => ({ saved: false }),
+    actions: {
+      async save() {
+        throw new Error('offline');
+      },
+    },
+  });
+  const container = createContainer();
+
+  try {
+    const store = useSaveStore(container);
+
+    await expect(store.save()).rejects.toThrow('offline');
+    expect(store.save.pending).toBe(false);
+    expect(store.save.error?.message).toBe('offline');
+  } finally {
+    container.dispose();
+  }
+});
+```
+
+For cancellation, make the dependency observe `this.$signal` and abort the
+action exactly as application code would:
+
+```ts
+test('abort cancels an in-flight action', async () => {
+  const useSearchStore = defineStore('search', {
+    state: () => ({ done: false }),
+    actions: {
+      async search() {
+        await new Promise<void>((resolve, reject) => {
+          this.$signal.addEventListener('abort', () => {
+            reject(this.$signal.reason);
+          });
+        });
+        this.done = true;
+      },
+    },
+  });
+  const container = createContainer();
+
+  try {
+    const store = useSearchStore(container);
+    const run = store.search();
+
+    store.search.abort(new Error('superseded'));
+
+    await expect(run).rejects.toThrow('superseded');
+    expect(store.done).toBe(false);
+    expect(store.search.pending).toBe(false);
+  } finally {
+    container.dispose();
+  }
+});
+```
+
+See [Async Actions](/docs/guides/async-actions) for the lifecycle contract.
+
+## Persistence with a fake adapter
+
+Do not use browser storage in a unit test. A tiny in-memory adapter is
+deterministic and implements the same persistence contract.
+
+```ts
+import {
+  createContainer,
+  defineStore,
+  type PersistenceAdapter,
+} from '@quantajs/core';
+
+class MemoryAdapter implements PersistenceAdapter {
+  readonly key = 'test-settings';
+  value: string | null = null;
+
+  read() {
+    return this.value;
+  }
+
+  write(data: string) {
+    this.value = data;
+  }
+
+  remove() {
+    this.value = null;
+  }
+}
+
+test('persisted state can be saved and restored', async () => {
+  const adapter = new MemoryAdapter();
+  const useSettingsStore = defineStore('settings', {
+    state: () => ({ theme: 'light' as 'light' | 'dark' }),
+    persist: { adapter },
+    actions: {
+      dark() {
+        this.theme = 'dark';
+      },
+    },
+  });
+
+  const first = createContainer();
+  const source = useSettingsStore(first);
+  source.dark();
+  await source.$persist.save();
+  first.dispose();
+
+  const second = createContainer();
+  try {
+    const restored = useSettingsStore(second);
+    await restored.$persist.load();
+
+    expect(restored.theme).toBe('dark');
+  } finally {
+    second.dispose();
+  }
+});
+```
+
+Use `await store.$hydrated` when the test should exercise the store's normal
+initial rehydration path instead of calling `load()` explicitly.
+
+## React components
+
+Pass a test-owned container to `<QuantaProvider>`. Hooks inside the component
+then resolve the same isolated stores your test can inspect directly.
+
+```tsx
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { createContainer, defineStore } from '@quantajs/core';
+import { QuantaProvider, useQuanta, useQuantaActions } from '@quantajs/react';
+
+const useCartStore = defineStore('cart', {
+  state: () => ({ count: 0 }),
+  actions: {
+    add() {
+      this.count += 1;
+    },
+  },
+});
+
+function Cart() {
+  const cart = useQuanta(useCartStore);
+  const actions = useQuantaActions(useCartStore);
+
+  return (
+    <>
+      <output aria-label="cart count">{cart.count}</output>
+      <button onClick={() => actions.add()}>Add</button>
+    </>
+  );
+}
+
+test('component uses the provider container', async () => {
+  const user = userEvent.setup();
+  const container = createContainer();
+
+  try {
+    render(
+      <QuantaProvider container={container}>
+        <Cart />
+      </QuantaProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+
+    expect(screen.getByLabelText('cart count')).toHaveTextContent('1');
+    expect(useCartStore(container).count).toBe(1);
+  } finally {
+    container.dispose();
+  }
+});
+```
+
+The important detail is the explicit `container` prop. Calling a definition
+directly from a component would resolve the ambient container instead; use the
+React hooks so provider scoping is preserved.
+
+## What to test
+
+Prefer tests that describe public behavior:
+
+- initial state and getters;
+- actions and state transitions;
+- `pending`, `error`, and cancellation for async actions;
+- persistence serialization/rehydration with a fake adapter;
+- component output and user interactions through a test-owned provider.
+
+Avoid assertions against internal proxy implementation details. A store should
+be free to change its internals while these behavioral tests keep passing.
+
+## Learn more
+
+- [Containers](/docs/api/containers)
+- [Async Actions](/docs/guides/async-actions)
+- [Persistence](/docs/api/persistence)
+- [React Integration](/docs/integration/react-integration)
