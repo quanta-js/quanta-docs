@@ -7,7 +7,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/docs/:path*.md',
-        destination: '/docs/:path*?format=md',
+        destination: '/api/docs/raw/:path*',
       },
     ];
   },
