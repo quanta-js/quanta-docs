@@ -55,7 +55,7 @@ To contribute:
 
 See the [Contributing page](https://quantajs.com/docs/contributing) for the content workflow.
 
-Good first issues are available in both the [documentation repository](https://github.com/quanta-js/quanta/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22good%20first%20issue%22) and the [QuantaJS core repository](https://github.com/quanta-js/quanta/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22good%20first%20issue%22).
+Good first issues are available in both the [documentation repository](https://github.com/quanta-js/quanta-docs/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22good%20first%20issue%22) and the [QuantaJS core repository](https://github.com/quanta-js/quanta/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22good%20first%20issue%22).
 
 ## ⭐ Support QuantaJS
 
