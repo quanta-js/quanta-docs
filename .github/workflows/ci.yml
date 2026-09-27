@@ -34,3 +34,20 @@ jobs:
 
       - name: 🏗️ Build
         run: npm run build
+
+      - name: 🔗 Check internal links and anchors
+        run: |
+          npm run start > /tmp/quanta-docs.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/ >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              cat /tmp/quanta-docs.log
+              exit 1
+            fi
+            sleep 1
+          done
+          npm run check:links
