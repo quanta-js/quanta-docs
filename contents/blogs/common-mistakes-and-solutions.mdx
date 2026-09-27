@@ -12,750 +12,522 @@ cover: "https://images.unsplash.com/photo-1664140546022-33b569e69655?q=80&w=1170
 
 # Common QuantaJS Mistakes and How to Avoid Them
 
-<Note type="warning" title="Written for QuantaJS 2.0">
-The code in this post uses the 2.0 API. `useStore`, `useStoreSelector` and
-`useCreateStore` were removed from `@quantajs/react` in 2.1, and
-`<QuantaProvider>` no longer takes a `stores` prop. See the
-[2.1 migration guide](/docs/getting-started/migration-2-1) for the current
-equivalents.
-</Note>
+QuantaJS 3.x keeps store definitions lightweight and resolves state through containers. Most mistakes come from blurring those two concepts, subscribing more broadly than a component needs, or treating server state like browser state.
 
+This guide focuses on the current 3.x API.
 
-Every developer encounters pitfalls when learning a new library. Based on real-world usage and community feedback, we've compiled the most common mistakes developers make with QuantaJS and how to avoid them. This guide will save you hours of debugging and frustration!
+## 1. Forgetting `this` in actions
 
-## 1. Forgetting to Use `this` in Actions
+### ❌ The mistake
 
-### ❌ The Mistake
-
-```javascript
-const store = createStore('counter', {
+```ts
+const useCounterStore = defineStore('counter', {
   state: () => ({ count: 0 }),
   actions: {
     increment() {
-      count++; // ❌ Error: count is not defined
+      count++;
     },
   },
 });
 ```
 
-### ✅ The Solution
+### ✅ The solution
 
-Always use `this` to access store properties in actions:
-
-```javascript
-const store = createStore('counter', {
+```ts
+const useCounterStore = defineStore('counter', {
   state: () => ({ count: 0 }),
   actions: {
     increment() {
-      this.count++; // ✅ Correct
+      this.count++;
     },
   },
 });
 ```
 
-### Why This Happens
+Actions are bound to the resolved store, so `this` is how an action reads and writes its own state, getters, and other actions.
 
-Actions are bound to the store instance, so you must use `this` to access state, getters, and other actions. This is similar to class methods in JavaScript.
+## 2. Resolving a whole store when one value is enough
 
-## 2. Not Providing Store Name to useStore
+### ❌ The mistake
 
-### ❌ The Mistake
-
-```javascript
-function Counter() {
-  const store = useStore(); // ❌ Error: Store name required
-  return <div>{store.count}</div>;
+```tsx
+function CounterLabel() {
+  const counter = useQuanta(useCounterStore);
+  return <span>{counter.count}</span>;
 }
 ```
 
-### ✅ The Solution
+This is correct, but it subscribes the component to the whole store.
 
-Always provide the store name:
+### ✅ The solution
 
-```javascript
-function Counter() {
-  const store = useStore('counter'); // ✅ Correct
-  return <div>{store.count}</div>;
+```tsx
+function CounterLabel() {
+  const count = useQuantaValue(useCounterStore, (state) => state.count);
+  return <span>{count}</span>;
 }
 ```
 
-### Alternative: Using Selectors
+Use `useQuantaValue` when a component only needs a slice of state.
 
-```javascript
-function Counter() {
-  const count = useStoreSelector('counter', store => store.count); // ✅ Even better
-  return <div>{count}</div>;
+## 3. Using state hooks in a dispatch-only component
+
+### ❌ The mistake
+
+```tsx
+function IncrementButton() {
+  const counter = useQuanta(useCounterStore);
+  return <button onClick={() => counter.increment()}>Increment</button>;
 }
 ```
 
-## 3. Incorrect QuantaProvider Setup
+The component does not render state, but it still subscribes to it.
 
-### ❌ The Mistake
+### ✅ The solution
 
-```javascript
-function App() {
+```tsx
+function IncrementButton() {
+  const counter = useQuantaActions(useCounterStore);
+  return <button onClick={() => counter.increment()}>Increment</button>;
+}
+```
+
+`useQuantaActions` is the right fit for dispatch-only UI.
+
+## 4. Treating `QuantaProvider` like a registry of stores
+
+Store definitions do not need to be enumerated up front. They resolve lazily against the provider's container.
+
+### ✅ Current pattern
+
+```tsx
+function App({ children }: { children: React.ReactNode }) {
+  return <QuantaProvider>{children}</QuantaProvider>;
+}
+```
+
+When server-rendered state needs to cross a boundary, pass a snapshot:
+
+```tsx
+<QuantaProvider snapshot={snapshot}>{children}</QuantaProvider>
+```
+
+## 5. Mutating state from arbitrary component code
+
+A resolved QuantaJS store is reactive, but scattering writes throughout the UI makes behavior harder to understand and test.
+
+### ❌ The mistake
+
+```tsx
+function TodoButton() {
+  const todos = useQuanta(useTodosStore);
+
   return (
-    <QuantaProvider store={counterStore}> {/* ❌ Wrong prop name */}
-      <Counter />
-    </QuantaProvider>
+    <button
+      onClick={() => {
+        todos.items.push({ id: crypto.randomUUID(), text: 'New todo' });
+      }}
+    >
+      Add
+    </button>
   );
 }
 ```
 
-### ✅ The Solution
+### ✅ The solution
 
-Use the `stores` prop (plural) with an object:
-
-```javascript
-function App() {
-  return (
-    <QuantaProvider stores={{ counter: counterStore }}> {/* ✅ Correct */}
-      <Counter />
-    </QuantaProvider>
-  );
-}
-```
-
-### Multiple Stores
-
-```javascript
-function App() {
-  return (
-    <QuantaProvider stores={{ 
-      user: userStore, 
-      cart: cartStore,
-      settings: settingsStore 
-    }}>
-      <App />
-    </QuantaProvider>
-  );
-}
-```
-
-## 4. Mutating State Directly Instead of Using Actions
-
-### ❌ The Mistake
-
-```javascript
-// Direct mutation - works but breaks reactivity tracking
-store.todos.push(newTodo); // ❌ May cause issues
-store.user.name = 'New Name'; // ❌ May not trigger updates
-```
-
-### ✅ The Solution
-
-Use actions for state mutations:
-
-```javascript
-const store = createStore('todos', {
-  state: () => ({ todos: [] }),
+```ts
+const useTodosStore = defineStore('todos', {
+  state: () => ({
+    items: [] as Array<{ id: string; text: string }>,
+  }),
   actions: {
-    addTodo(todo) {
-      this.todos.push(todo); // ✅ Inside action, reactivity is tracked
-    },
-    updateUserName(name) {
-      this.user.name = name; // ✅ Properly tracked
+    addTodo(text: string) {
+      this.items.push({ id: crypto.randomUUID(), text });
     },
   },
 });
-
-// Use actions
-store.addTodo(newTodo); // ✅ Correct
-store.updateUserName('New Name'); // ✅ Correct
 ```
 
-### When Direct Mutation is OK
+```tsx
+function TodoButton() {
+  const todos = useQuantaActions(useTodosStore);
+  return <button onClick={() => todos.addTodo('New todo')}>Add</button>;
+}
+```
 
-Direct mutation is fine for simple cases, but actions provide:
-- Better debugging
-- Consistent patterns
-- Easier testing
-- Clearer intent
+Actions give mutations a stable name and one testable home.
 
-## 5. Not Understanding Computed Values (Getters)
+## 6. Recomputing reusable derived state in components
 
-### ❌ The Mistake
+### ❌ The mistake
 
-```javascript
-// Expensive calculation in component
+```tsx
 function TodoStats() {
-  const todos = useStoreSelector('todos', store => store.todos);
-  const completed = todos.filter(t => t.done).length; // ❌ Recalculates every render
-  return <div>Completed: {completed}</div>;
+  const todos = useQuantaValue(useTodosStore, (state) => state.items);
+  const completed = todos.filter((todo) => todo.done).length;
+  return <span>{completed}</span>;
 }
 ```
 
-### ✅ The Solution
+### ✅ The solution
 
-Use getters for computed values:
-
-```javascript
-const todoStore = createStore('todos', {
-  state: () => ({ todos: [] }),
+```ts
+const useTodosStore = defineStore('todos', {
+  state: () => ({
+    items: [] as Array<{ id: string; done: boolean }>,
+  }),
   getters: {
-    completedCount: (state) => state.todos.filter(t => t.done).length, // ✅ Cached
-    activeCount: (state) => state.todos.filter(t => !t.done).length,
+    completedCount: (state) =>
+      state.items.filter((todo) => todo.done).length,
   },
 });
+```
 
+```tsx
 function TodoStats() {
-  const completed = useStoreSelector('todos', store => store.completedCount); // ✅ Uses cached value
-  return <div>Completed: {completed}</div>;
-}
-```
-
-## 6. Watching Entire Stores Instead of Specific Values
-
-### ❌ The Mistake
-
-```javascript
-// Watches entire store - triggers on ANY change
-watch(() => appStore, (store) => { // ❌ Too broad
-  console.log('Store changed');
-});
-```
-
-### ✅ The Solution
-
-Watch specific values:
-
-```javascript
-// Watch specific property
-watch(() => appStore.currentView, (view) => { // ✅ Specific
-  console.log('View changed:', view);
-});
-
-// Watch multiple specific values
-watch(() => ({
-  view: appStore.currentView,
-  user: appStore.user?.id,
-}), (values) => {
-  console.log('Relevant values changed:', values);
-});
-```
-
-## 7. Not Cleaning Up Watchers
-
-### ❌ The Mistake
-
-```javascript
-useEffect(() => {
-  watch(() => store.value, (value) => {
-    console.log(value);
-  });
-  // ❌ No cleanup - watcher continues after unmount
-}, []);
-```
-
-### ✅ The Solution
-
-Always clean up watchers:
-
-```javascript
-useEffect(() => {
-  const unwatch = watch(() => store.value, (value) => {
-    console.log(value);
-  });
-  
-  return () => {
-    unwatch(); // ✅ Cleanup
-  };
-}, []);
-```
-
-## 8. Incorrect Persistence Configuration
-
-### ❌ The Mistake
-
-```javascript
-// Persisting everything, including large objects
-const store = createStore('app', {
-  state: () => ({
-    user: { /* large object */ },
-    cache: new Map(), // ❌ Can't serialize Map
-    temporaryData: [], // ❌ Don't need to persist
-  }),
-  persist: {
-    adapter: new LocalStorageAdapter('app'),
-    // ❌ Persists everything, including non-serializable data
-  },
-});
-```
-
-### ✅ The Solution
-
-Use selective persistence:
-
-```javascript
-const store = createStore('app', {
-  state: () => ({
-    user: { /* large object */ },
-    cache: new Map(),
-    temporaryData: [],
-  }),
-  persist: {
-    adapter: new LocalStorageAdapter('app'),
-    include: ['user'], // ✅ Only persist what's needed
-    exclude: ['cache', 'temporaryData'], // ✅ Explicitly exclude
-    debounceMs: 300, // ✅ Debounce saves
-  },
-});
-```
-
-## 9. Store Name Conflicts
-
-### ❌ The Mistake
-
-```javascript
-// Creating stores with the same name
-const store1 = createStore('user', { /* ... */ });
-const store2 = createStore('user', { /* ... */ }); // ❌ Error: Duplicate name
-```
-
-### ✅ The Solution
-
-Use unique store names:
-
-```javascript
-const userStore = createStore('user', { /* ... */ });
-const userPreferencesStore = createStore('user-preferences', { /* ... */ }); // ✅ Unique
-```
-
-### Best Practice: Use Descriptive Names
-
-```javascript
-// ✅ Good naming
-const shoppingCartStore = createStore('shopping-cart', { /* ... */ });
-const userProfileStore = createStore('user-profile', { /* ... */ });
-const appSettingsStore = createStore('app-settings', { /* ... */ });
-```
-
-## 10. Not Handling Async Actions Properly
-
-### ❌ The Mistake
-
-```javascript
-const store = createStore('user', {
-  state: () => ({ user: null, error: null }),
-  actions: {
-    async login(credentials) {
-      const user = await api.login(credentials); // ❌ No error handling
-      this.user = user; // ❌ No loading state
-    },
-  },
-});
-```
-
-### ✅ The Solution
-
-Handle async actions with proper error handling and loading states:
-
-```javascript
-const store = createStore('user', {
-  state: () => ({ 
-    user: null, 
-    error: null,
-    isLoading: false,
-  }),
-  actions: {
-    async login(credentials) {
-      this.isLoading = true;
-      this.error = null;
-      
-      try {
-        const user = await api.login(credentials);
-        this.user = user;
-      } catch (error) {
-        this.error = error.message;
-      } finally {
-        this.isLoading = false;
-      }
-    },
-  },
-});
-```
-
-## 11. Subscribing to Entire Store When Only Needing Specific Values
-
-### ❌ The Mistake
-
-```javascript
-function UserName() {
-  const store = useStore('user'); // ❌ Subscribes to entire store
-  return <div>{store.name}</div>; // Only needs name
-}
-```
-
-### ✅ The Solution
-
-Use selectors for fine-grained subscriptions:
-
-```javascript
-function UserName() {
-  const name = useStoreSelector('user', store => store.name); // ✅ Only subscribes to name
-  return <div>{name}</div>;
-}
-```
-
-### Performance Impact
-
-```javascript
-// ❌ Bad: Re-renders on ANY user store change
-function UserProfile() {
-  const store = useStore('user');
-  return (
-    <div>
-      <div>Name: {store.name}</div>
-      <div>Email: {store.email}</div>
-    </div>
+  const completed = useQuantaValue(
+    useTodosStore,
+    (state) => state.completedCount,
   );
-}
-
-// ✅ Good: Only re-renders when name or email changes
-function UserProfile() {
-  const name = useStoreSelector('user', store => store.name);
-  const email = useStoreSelector('user', store => store.email);
-  return (
-    <div>
-      <div>Name: {name}</div>
-      <div>Email: {email}</div>
-    </div>
-  );
+  return <span>{completed}</span>;
 }
 ```
 
-## 12. Not Using TypeScript Types Correctly
+Put reusable derivations in getters so every component shares the same rule.
 
-### ❌ The Mistake
+## 7. Watching more state than the side effect needs
 
-```javascript
-// No type safety
-const store = createStore('user', {
-  state: () => ({ user: null }),
-  actions: {
-    login(user) {
-      this.user = user; // ❌ No type checking
-    },
-  },
-});
+### ❌ The mistake
+
+```ts
+watch(
+  () => settings,
+  () => syncTheme(),
+);
 ```
 
-### ✅ The Solution
+### ✅ The solution
 
-Use TypeScript for type safety:
+```ts
+watch(
+  () => settings.theme,
+  (theme) => applyTheme(theme),
+);
+```
 
-```typescript
-interface User {
-  id: string;
-  name: string;
-  email: string;
-}
+QuantaJS 3.x also supports a custom equality function for `watch`, which is useful when a source returns a small object or tuple.
 
-interface UserState {
-  user: User | null;
-  isLoading: boolean;
-}
+## 8. Forgetting watcher cleanup
 
-interface UserActions {
-  login(user: User): void;
-  logout(): void;
-}
+### ❌ The mistake
 
-const userStore = createStore<UserState, {}, UserActions>('user', {
-  state: (): UserState => ({
+```tsx
+useEffect(() => {
+  watch(() => store.value, logValue);
+}, [store]);
+```
+
+### ✅ The solution
+
+```tsx
+useEffect(() => {
+  const stop = watch(() => store.value, logValue);
+  return stop;
+}, [store]);
+```
+
+Long-lived watchers should be disposed with the component or lifecycle that created them.
+
+## 9. Persisting more state than necessary
+
+### ❌ The mistake
+
+```ts
+const useAppStore = defineStore('app', {
+  state: () => ({
     user: null,
-    isLoading: false,
+    temporaryResults: [] as Result[],
+    cache: {} as Record<string, Result>,
+  }),
+  persist: {
+    adapter: new LocalStorageAdapter('app'),
+  },
+});
+```
+
+### ✅ The solution
+
+```ts
+const useAppStore = defineStore('app', {
+  state: () => ({
+    user: null as User | null,
+    preferences: { theme: 'system' },
+    temporaryResults: [] as Result[],
+  }),
+  persist: {
+    adapter: new LocalStorageAdapter('app'),
+    include: ['user', 'preferences'],
+    debounceMs: 300,
+  },
+});
+```
+
+Persist only state that must survive reloads. In 3.x the persistence configuration is typed from the store state.
+
+## 10. Ignoring async action lifecycle state
+
+You do not need a parallel `loading` flag for every async action.
+
+```ts
+const useUserStore = defineStore('user', {
+  state: () => ({
+    profile: null as User | null,
   }),
   actions: {
-    login(user: User) {
-      this.user = user; // ✅ Type-safe
-    },
-    logout() {
-      this.user = null;
+    async load(id: string) {
+      const response = await fetch(`/api/users/${id}`, {
+        signal: this.$signal,
+      });
+      this.profile = await response.json();
     },
   },
 });
 ```
 
-## 13. Creating Stores Inside Components
+```tsx
+function UserPanel() {
+  const user = useQuanta(useUserStore);
 
-### ❌ The Mistake
+  if (user.load.pending) return <p>Loading…</p>;
+  if (user.load.error) return <p>Could not load the user.</p>;
 
-```javascript
-function Counter() {
-  // ❌ Creates new store on every render!
-  const store = createStore('counter', {
-    state: () => ({ count: 0 }),
-  });
-  
-  return <div>{store.count}</div>;
+  return <p>{user.profile?.name}</p>;
 }
 ```
 
-### ✅ The Solution
+Use the action's built-in `pending`, `error`, and abort support instead of duplicating that state by hand.
 
-Create stores outside components or use `useCreateStore`:
+## 11. Creating a component-owned store incorrectly
 
-```javascript
-// ✅ Create outside component
-const counterStore = createStore('counter', {
-  state: () => ({ count: 0 }),
-});
+A store definition should stay at module scope. Component-local ownership comes from `useLocalStore`.
 
-function Counter() {
-  const store = useStore('counter');
-  return <div>{store.count}</div>;
-}
+### ✅ The solution
 
-// OR use useCreateStore for component-scoped stores
-function Counter() {
-  const store = useCreateStore('counter', () => ({ count: 0 }));
-  return <div>{store.count}</div>;
-}
-```
-
-## 14. Not Understanding Deep Watching Performance
-
-### ❌ The Mistake
-
-```javascript
-// Using deep watch unnecessarily
-watch(() => store.settings, (settings) => {
-  // ...
-}, { deep: true }); // ❌ Uses polling, can be slow
-```
-
-### ✅ The Solution
-
-Use deep watching only when necessary, prefer specific property watching:
-
-```javascript
-// ✅ Better: Watch specific properties
-watch(() => store.settings.theme, (theme) => {
-  applyTheme(theme);
-});
-
-// Only use deep when you truly need it
-watch(() => store.complexNestedObject, (obj) => {
-  // ...
-}, { deep: true }); // ✅ Only when necessary
-```
-
-## 15. Forgetting to Reset Stores in Tests
-
-### ❌ The Mistake
-
-```javascript
-describe('Store Tests', () => {
-  const store = createStore('test', {
-    state: () => ({ count: 0 }),
-  });
-
-  it('test 1', () => {
-    store.count = 5;
-    expect(store.count).toBe(5);
-  });
-
-  it('test 2', () => {
-    // ❌ store.count is still 5 from previous test!
-    expect(store.count).toBe(0); // Fails!
-  });
-});
-```
-
-### ✅ The Solution
-
-Reset stores between tests:
-
-```javascript
-describe('Store Tests', () => {
-  let store: ReturnType<typeof createStore>;
-
-  beforeEach(() => {
-    store = createStore('test', {
-      state: () => ({ count: 0 }),
-    });
-  });
-
-  it('test 1', () => {
-    store.count = 5;
-    expect(store.count).toBe(5);
-  });
-
-  it('test 2', () => {
-    store.$reset(); // ✅ Reset before test
-    expect(store.count).toBe(0); // ✅ Passes
-  });
-});
-```
-
-## 16. Not Handling Store Destruction
-
-### ❌ The Mistake
-
-```javascript
-// Creating temporary stores without cleanup
-function TemporaryComponent() {
-  const store = useCreateStore('temp', () => ({ data: [] }));
-  // ❌ Store persists even after component unmounts
-  return <div>{/* ... */}</div>;
-}
-```
-
-### ✅ The Solution
-
-Clean up stores when no longer needed:
-
-```javascript
-function TemporaryComponent() {
-  const store = useCreateStore('temp', () => ({ data: [] }));
-  
-  useEffect(() => {
-    return () => {
-      store.$destroy(); // ✅ Clean up on unmount
-    };
-  }, []);
-  
-  return <div>{/* ... */}</div>;
-}
-```
-
-## 17. Incorrect Selector Usage
-
-### ❌ The Mistake
-
-```javascript
-// Selector that creates new object every time
-function Component() {
-  const data = useStoreSelector('store', store => ({
-    a: store.a,
-    b: store.b,
-  })); // ❌ New object every time = always re-renders
-  return <div>{/* ... */}</div>;
-}
-```
-
-### ✅ The Solution
-
-Use stable selectors or select individual values:
-
-```javascript
-// ✅ Select individual values
-function Component() {
-  const a = useStoreSelector('store', store => store.a);
-  const b = useStoreSelector('store', store => store.b);
-  return <div>{/* ... */}</div>;
-}
-
-// OR use a getter for computed objects
-const store = createStore('store', {
-  state: () => ({ a: 1, b: 2 }),
-  getters: {
-    combined: (state) => ({ a: state.a, b: state.b }), // ✅ Cached
+```tsx
+const useDraftStore = defineStore('draft', {
+  state: () => ({ text: '' }),
+  actions: {
+    setText(text: string) {
+      this.text = text;
+    },
   },
 });
+
+function DraftEditor() {
+  const draft = useLocalStore(useDraftStore);
+
+  return (
+    <textarea
+      value={draft.text}
+      onChange={(event) => draft.setText(event.target.value)}
+    />
+  );
+}
 ```
 
-## Quick Reference: Common Patterns
+Two mounted editors get separate state without creating definitions during render.
 
-### ✅ Good Patterns
+## 12. Returning unstable selector objects without equality
 
-```javascript
-// 1. Use this in actions
-actions: {
-  increment() { this.count++; }
+### ❌ The mistake
+
+```tsx
+const summary = useQuantaValue(
+  useUserStore,
+  (state) => ({
+    name: state.name,
+    email: state.email,
+  }),
+);
+```
+
+The selector creates a new object each time it runs.
+
+### ✅ The solution
+
+```tsx
+import { shallow } from '@quantajs/core';
+
+const summary = useQuantaValue(
+  useUserStore,
+  (state) => ({
+    name: state.name,
+    email: state.email,
+  }),
+  { equalityFn: shallow },
+);
+```
+
+Or select primitive values separately when that is simpler.
+
+## 13. Putting unrelated domains in one store
+
+### ❌ The mistake
+
+```ts
+const useEverythingStore = defineStore('app', {
+  state: () => ({
+    user: null,
+    cart: [],
+    todos: [],
+    theme: 'system',
+    searchResults: [],
+  }),
+});
+```
+
+### ✅ The solution
+
+Create domain stores such as `useUserStore`, `useCartStore`, and `useSettingsStore`.
+
+Smaller stores make ownership clearer and help components subscribe only to what they use.
+
+## 14. Assuming every store should use the ambient container on a server
+
+This is the most important server-side mistake in 3.x.
+
+A Node server handles many users in one process. Resolving a store against shared ambient state can leak one request's data into another.
+
+### ❌ The mistake
+
+```ts
+export async function GET() {
+  const user = useUserStore();
+  user.profile = await loadCurrentUser();
+  return Response.json(user.profile);
 }
+```
 
-// 2. Use selectors
-const count = useStoreSelector('counter', store => store.count);
+### ✅ The solution
 
-// 3. Use getters for computed values
-getters: {
-  total: (state) => state.items.reduce((sum, item) => sum + item.price, 0)
-}
+```ts
+import { createContainer } from '@quantajs/core';
 
-// 4. Handle async properly
-async action() {
-  this.loading = true;
+export async function GET() {
+  const container = createContainer();
+
   try {
-    // ...
+    const user = useUserStore(container);
+    user.profile = await loadCurrentUser();
+    return Response.json(container.dehydrate());
   } finally {
-    this.loading = false;
+    container.dispose();
   }
 }
-
-// 5. Clean up watchers
-useEffect(() => {
-  const unwatch = watch(/* ... */);
-  return () => unwatch();
-}, []);
 ```
 
-### ❌ Anti-Patterns to Avoid
+Create one container per request, resolve server-side stores against it explicitly, then dispose it.
 
-```javascript
-// 1. Forgetting this
-actions: { increment() { count++; } } // ❌
+For frameworks that need an ambient server resolver, use a request-scoped resolver such as `setDefaultContainerResolver` backed by request-local context rather than a process-wide singleton.
 
-// 2. No store name
-useStore() // ❌
+## 15. Sharing one container between tests
 
-// 3. Wrong provider prop
-<QuantaProvider store={store} /> // ❌
+Tests should not inherit state from the previous test.
 
-// 4. Direct mutations everywhere
-store.todos.push(item) // ❌ (use actions)
+### ✅ The solution
 
-// 5. No cleanup
-watch(/* ... */) // ❌ (no cleanup)
-```
+```ts
+import { createContainer } from '@quantajs/core';
 
-## Debugging Tips
+describe('counter', () => {
+  let container: ReturnType<typeof createContainer>;
 
-### Enable Debug Logging
-
-```javascript
-import { logger, LogLevel } from '@quantajs/core';
-
-// In development
-if (process.env.NODE_ENV === 'development') {
-  logger.configure({
-    level: LogLevel.DEBUG,
-    prefix: 'QuantaJS',
+  beforeEach(() => {
+    container = createContainer();
   });
-}
+
+  afterEach(() => {
+    container.dispose();
+  });
+
+  it('increments', () => {
+    const counter = useCounterStore(container);
+
+    counter.increment();
+
+    expect(counter.count).toBe(1);
+  });
+});
 ```
 
-### Check Store State
+A fresh container per test is deterministic and avoids cleanup-by-reset conventions.
 
-```javascript
-// Log store state
-console.log('Store state:', store.state);
-console.log('Store getters:', store.getters);
+## 16. Forgetting that snapshots must be serializable
+
+A server snapshot commonly crosses a framework serialization boundary.
+
+### ❌ Risky state
+
+```ts
+state: () => ({
+  lastSeen: new Date(),
+  selected: new Set<string>(),
+})
 ```
 
-### Verify Subscriptions
+### ✅ Safer state
 
-```javascript
-// Check if component is subscribed
-const store = useStore('counter');
-console.log('Subscribed to:', store);
+```ts
+state: () => ({
+  lastSeenIso: new Date().toISOString(),
+  selectedIds: [] as string[],
+})
+```
+
+Normalize non-serializable values before dehydration when the snapshot will be sent to a client.
+
+## 17. Optimizing before measuring
+
+A broad subscription is not automatically a bug, and splitting every value into its own selector can make code harder to read.
+
+Start with the clearest correct code, use browser performance tools to find hot components, then narrow the subscriptions that actually matter.
+
+## Quick reference
+
+### Prefer
+
+```tsx
+const count = useQuantaValue(useCounterStore, (state) => state.count);
+const actions = useQuantaActions(useCounterStore);
+const draft = useLocalStore(useDraftStore);
+```
+
+### On the server
+
+```ts
+const container = createContainer();
+const store = useUserStore(container);
+```
+
+### In tests
+
+```ts
+const container = createContainer();
+const store = useCounterStore(container);
+container.dispose();
 ```
 
 ## Conclusion
 
-Avoiding these common mistakes will make your QuantaJS development experience much smoother. Remember:
+The safest QuantaJS 3.x code follows a few consistent rules:
 
-- **Always use `this` in actions**
-- **Provide store names to `useStore`**
-- **Use `stores` prop (plural) for QuantaProvider**
-- **Use selectors for performance**
-- **Handle async actions properly**
-- **Clean up watchers and stores**
-- **Use TypeScript for type safety**
+- Define stores once with `defineStore`.
+- Resolve state through the right container.
+- Subscribe as narrowly as the component needs.
+- Put mutations in actions and reusable derivations in getters.
+- Use `useLocalStore` for component-owned state.
+- Create a fresh container per request and per test.
+- Keep persisted and dehydrated state intentionally small.
 
-Most importantly: **Read the error messages!** QuantaJS provides helpful error messages that will guide you to the solution.
-
-If you encounter issues not covered here, check our [documentation](/docs/getting-started/introduction) or reach out to the community.
-
-Happy coding! 🚀
+Those boundaries make state easier to reason about, easier to test, and safer across both browser and server runtimes.
