@@ -12,96 +12,409 @@ cover: "https://images.unsplash.com/photo-1642630676881-d80d35383b54?q=80&w=1170
 
 # Building Scalable Next.js Apps with QuantaJS State Management
 
-<Note type="warning" title="Written for QuantaJS 2.0">
-The code in this post uses the 2.0 API. `useStore`, `useStoreSelector` and
-`useCreateStore` were removed from `@quantajs/react` in 2.1, and
-`<QuantaProvider>` no longer takes a `stores` prop. See the
-[2.1 migration guide](/docs/getting-started/migration-2-1) for the current
-equivalents.
-</Note>
+Next.js App Router applications run server code for many users inside the same process. QuantaJS 3.x fits that model well as long as server state is scoped to a request instead of being resolved against a shared ambient container.
 
-
-Next.js has revolutionized React development with its powerful features like Server-Side Rendering (SSR), Static Site Generation (SSG), and the new App Router. When combined with QuantaJS state management, you get a powerful stack for building scalable, performant applications. In this guide, we'll explore how to effectively integrate QuantaJS with Next.js.
+This guide uses the current 3.x APIs throughout.
 
 ## Why QuantaJS + Next.js?
 
-The combination of QuantaJS and Next.js offers several advantages:
+The combination works well for a few reasons:
 
-### 1. **Framework-Agnostic Core**
-QuantaJS core is completely framework-agnostic, making it perfect for Next.js applications that need to share state between server and client components.
+### 1. Framework-agnostic core
 
-### 2. **Lightweight React Integration**
-The `@quantajs/react` package provides minimal overhead while offering powerful React hooks and context integration.
+Store definitions and containers live in `@quantajs/core`, so the same state model can be used from Server Components, route handlers, tests, and client components.
 
-### 3. **SSR/SSG Compatibility**
-QuantaJS works seamlessly with Next.js rendering strategies, allowing you to hydrate state on the client while maintaining server-side rendering benefits.
+### 2. Focused React integration
 
-### 4. **Performance Optimized**
-With built-in reactivity and efficient re-rendering, QuantaJS helps you build performant Next.js applications.
+`@quantajs/react` provides:
 
-## Setting Up QuantaJS with Next.js
+- `useQuanta` for a whole resolved store
+- `useQuantaValue` for narrow state selection
+- `useQuantaActions` for dispatch-only components
+- `useLocalStore` for component-owned store state
+- `QuantaProvider` for client container ownership and snapshot hydration
 
-### Installation
+### 3. Request-safe SSR
+
+The key server pattern is explicit:
+
+1. create a container for the request;
+2. resolve stores against it;
+3. populate state;
+4. dehydrate a plain snapshot;
+5. dispose the server container;
+6. hydrate that snapshot at a client boundary.
+
+### 4. Fine-grained rendering
+
+Components can subscribe to only the state they render instead of waking on every store notification.
+
+## Installation
 
 ```bash
 npm install @quantajs/core @quantajs/react
 ```
 
-### Basic Setup with App Router
+## 1. Define stores at module scope
 
-Create a store provider that works with Next.js App Router:
+A `defineStore` definition does not hold request state by itself, so it is safe to import from both server and client code.
 
-```typescript:lib/stores/user-store.ts
-import { createStore } from '@quantajs/core';
+```ts
+// lib/stores/user-store.ts
+import { defineStore } from '@quantajs/core';
 
-export const userStore = createStore('user', {
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export const useUserStore = defineStore('user', {
   state: () => ({
-    user: null as { id: string; name: string; email: string } | null,
-    isAuthenticated: false,
+    user: null as User | null,
     preferences: {
       theme: 'light' as 'light' | 'dark',
-      language: 'en'
-    }
+      language: 'en',
+    },
   }),
   getters: {
-    displayName: (state) => state.user?.name || 'Guest',
-    isLoggedIn: (state) => state.isAuthenticated
+    displayName: (state) => state.user?.name ?? 'Guest',
+    isLoggedIn: (state) => state.user !== null,
   },
   actions: {
-    login(userData: { id: string; name: string; email: string }) {
-      this.user = userData;
-      this.isAuthenticated = true;
+    login(user: User) {
+      this.user = user;
     },
     logout() {
       this.user = null;
-      this.isAuthenticated = false;
     },
-    updatePreferences(preferences: Partial<typeof this.preferences>) {
+    updatePreferences(
+      preferences: Partial<{ theme: 'light' | 'dark'; language: string }>,
+    ) {
       Object.assign(this.preferences, preferences);
-    }
-  }
+    },
+  },
 });
 ```
 
-### Provider Setup
+## 2. Create a container per server request
 
-```typescript:app/providers.tsx
+A Server Component can safely prepare store state as long as it uses a request-scoped container.
+
+```tsx
+// app/page.tsx
+import { createContainer } from '@quantajs/core';
+import { useUserStore } from '@/lib/stores/user-store';
+import { Providers } from './providers';
+import { UserProfile } from './user-profile';
+
+export default async function Page() {
+  const container = createContainer();
+
+  try {
+    const user = useUserStore(container);
+    user.user = await loadCurrentUser();
+
+    const snapshot = container.dehydrate();
+
+    return (
+      <Providers snapshot={snapshot}>
+        <UserProfile />
+      </Providers>
+    );
+  } finally {
+    container.dispose();
+  }
+}
+```
+
+The important part is that `useUserStore(container)` resolves against the request's container rather than ambient process-wide state.
+
+## 3. Hydrate at a client boundary
+
+```tsx
+// app/providers.tsx
 'use client';
 
+import type { ReactNode } from 'react';
+import type { ContainerSnapshot } from '@quantajs/core';
 import { QuantaProvider } from '@quantajs/react';
-import { userStore } from '@/lib/stores/user-store';
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({
+  snapshot,
+  children,
+}: {
+  snapshot: ContainerSnapshot;
+  children: ReactNode;
+}) {
+  return <QuantaProvider snapshot={snapshot}>{children}</QuantaProvider>;
+}
+```
+
+The snapshot is plain serializable data, so it can cross the Server Component boundary as a prop.
+
+Hydration happens during the provider's first render, before children read store state.
+
+## 4. Read state in client components
+
+Every file that uses QuantaJS React hooks must be a client component.
+
+```tsx
+// app/user-profile.tsx
+'use client';
+
+import { useQuanta } from '@quantajs/react';
+import { useUserStore } from '@/lib/stores/user-store';
+
+export function UserProfile() {
+  const user = useQuanta(useUserStore);
+
+  if (!user.isLoggedIn) {
+    return <p>Please log in.</p>;
+  }
+
   return (
-    <QuantaProvider stores={{ user: userStore }}>
-      {children}
-    </QuantaProvider>
+    <section>
+      <h2>Welcome, {user.displayName}</h2>
+      <p>{user.user?.email}</p>
+      <button onClick={() => user.logout()}>Logout</button>
+    </section>
   );
 }
 ```
 
-```typescript:app/layout.tsx
-import { Providers } from './providers';
+## Multiple stores
+
+Larger applications can define several independent stores. They do not need to be registered with the provider ahead of time.
+
+```ts
+// lib/stores/cart-store.ts
+import { defineStore } from '@quantajs/core';
+
+interface CartItem {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+}
+
+export const useCartStore = defineStore('cart', {
+  state: () => ({
+    items: [] as CartItem[],
+    isOpen: false,
+  }),
+  getters: {
+    totalItems: (state) =>
+      state.items.reduce((sum, item) => sum + item.quantity, 0),
+    totalPrice: (state) =>
+      state.items.reduce(
+        (sum, item) => sum + item.price * item.quantity,
+        0,
+      ),
+  },
+  actions: {
+    addItem(item: Omit<CartItem, 'quantity'>) {
+      const existing = this.items.find((entry) => entry.id === item.id);
+
+      if (existing) {
+        existing.quantity++;
+      } else {
+        this.items.push({ ...item, quantity: 1 });
+      }
+    },
+    removeItem(id: string) {
+      this.items = this.items.filter((item) => item.id !== id);
+    },
+    toggleCart() {
+      this.isOpen = !this.isOpen;
+    },
+  },
+});
+```
+
+The same request container can resolve both stores on the server, and the same client provider can resolve both lazily after hydration.
+
+## Server Components and Route Handlers
+
+Server code should never resolve user-specific state through an ambient container.
+
+### ❌ Shared server state
+
+```ts
+export async function GET() {
+  const user = useUserStore();
+  user.user = await loadCurrentUser();
+
+  return Response.json(user.user);
+}
+```
+
+### ✅ Request-scoped state
+
+```ts
+import { createContainer } from '@quantajs/core';
+import { useUserStore } from '@/lib/stores/user-store';
+
+export async function GET() {
+  const container = createContainer();
+
+  try {
+    const user = useUserStore(container);
+    user.user = await loadCurrentUser();
+
+    return Response.json(container.dehydrate());
+  } finally {
+    container.dispose();
+  }
+}
+```
+
+The same rule applies to Server Actions: return data or a snapshot to the client instead of mutating a process-wide store instance.
+
+## Narrow subscriptions
+
+Use `useQuantaValue` when a component renders only a small slice of a store.
+
+```tsx
+'use client';
+
+import { shallow } from '@quantajs/core';
+import { useQuantaActions, useQuantaValue } from '@quantajs/react';
+import { useCartStore } from '@/lib/stores/cart-store';
+
+export function CartButton() {
+  const summary = useQuantaValue(
+    useCartStore,
+    (state) => ({
+      totalItems: state.totalItems,
+      isOpen: state.isOpen,
+    }),
+    { equalityFn: shallow },
+  );
+
+  const cart = useQuantaActions(useCartStore);
+
+  return (
+    <button onClick={() => cart.toggleCart()}>
+      Cart ({summary.totalItems})
+      {summary.isOpen && ' — open'}
+    </button>
+  );
+}
+```
+
+A dispatch-only component can use `useQuantaActions` without subscribing to state at all.
+
+## Component-scoped stores
+
+For state that belongs to one mounted component, define the store once and resolve it with `useLocalStore`.
+
+```tsx
+'use client';
+
+import { defineStore } from '@quantajs/core';
+import { useLocalStore } from '@quantajs/react';
+
+const useTodoDraftStore = defineStore('todo-draft', {
+  state: () => ({
+    text: '',
+    filter: 'all' as 'all' | 'active' | 'completed',
+  }),
+  actions: {
+    setText(text: string) {
+      this.text = text;
+    },
+  },
+});
+
+export function TodoEditor() {
+  const draft = useLocalStore(useTodoDraftStore);
+
+  return (
+    <input
+      value={draft.text}
+      onChange={(event) => draft.setText(event.target.value)}
+    />
+  );
+}
+```
+
+Each mounted editor owns separate state.
+
+## Persistence
+
+Browser persistence can be configured in the store definition.
+
+```ts
+import { defineStore, LocalStorageAdapter } from '@quantajs/core';
+
+export const useCartStore = defineStore('cart', {
+  state: () => ({
+    items: [] as CartItem[],
+  }),
+  actions: {
+    add(item: CartItem) {
+      this.items.push(item);
+    },
+  },
+  persist: {
+    adapter: new LocalStorageAdapter('cart'),
+    debounceMs: 300,
+  },
+});
+```
+
+The storage adapters are server-safe: they degrade to a no-op when browser storage is unavailable.
+
+If the same store is hydrated from SSR and restored from persistence, the server snapshot is applied first and persisted state restores afterward. `await store.$hydrated` tells you when that process is complete.
+
+## Async actions
+
+QuantaJS exposes action lifecycle state directly.
+
+```ts
+export const useProfileStore = defineStore('profile', {
+  state: () => ({
+    profile: null as User | null,
+  }),
+  actions: {
+    async load(id: string) {
+      const response = await fetch(`/api/users/${id}`, {
+        signal: this.$signal,
+      });
+
+      if (!response.ok) {
+        throw new Error('Could not load profile');
+      }
+
+      this.profile = await response.json();
+    },
+  },
+});
+```
+
+```tsx
+'use client';
+
+import { useQuanta } from '@quantajs/react';
+
+function Profile() {
+  const profile = useQuanta(useProfileStore);
+
+  if (profile.load.pending) return <p>Loading…</p>;
+  if (profile.load.error) return <p>Could not load profile.</p>;
+
+  return <p>{profile.profile?.name}</p>;
+}
+```
+
+## Root provider vs route provider
+
+A root provider is useful when all state is client-owned and no request-specific snapshot is needed:
+
+```tsx
+// app/layout.tsx
+import { QuantaProvider } from '@quantajs/react';
 
 export default function RootLayout({
   children,
@@ -111,256 +424,112 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <Providers>
-          {children}
-        </Providers>
+        <QuantaProvider>{children}</QuantaProvider>
       </body>
     </html>
   );
 }
 ```
 
-## Working with Server and Client Components
+For request-specific server state, prefer the per-route pattern shown earlier so the server snapshot is created close to the data it represents.
 
-### Client Components
+## TypeScript
 
-Use QuantaJS hooks in client components:
+`defineStore` infers state, getters, and actions.
 
-```typescript:app/components/user-profile.tsx
-'use client';
-
-import { useStore } from '@quantajs/react';
-
-export function UserProfile() {
-  const store = useStore('user');
-  
-  if (!store.isLoggedIn) {
-    return <div>Please log in</div>;
-  }
-  
-  return (
-    <div>
-      <h2>Welcome, {store.displayName}!</h2>
-      <p>Email: {store.user?.email}</p>
-      <button onClick={() => store.logout()}>Logout</button>
-    </div>
-  );
-}
-```
-
-### Server Components
-
-Server components can't use hooks, but you can pass data down:
-
-```typescript:app/components/server-user-info.tsx
-import { userStore } from '@/lib/stores/user-store';
-
-export function ServerUserInfo() {
-  // Access store state directly (read-only)
-  const user = userStore.user;
-  const isAuthenticated = userStore.isAuthenticated;
-  
-  if (!isAuthenticated) {
-    return <div>Not authenticated</div>;
-  }
-  
-  return (
-    <div>
-      <h3>Server Rendered User Info</h3>
-      <p>Name: {user?.name}</p>
-      <p>Email: {user?.email}</p>
-    </div>
-  );
-}
-```
-
-## Advanced Patterns
-
-### Multiple Stores
-
-For larger applications, you might want multiple stores:
-
-```typescript:lib/stores/cart-store.ts
-import { createStore } from '@quantajs/core';
-
-export const cartStore = createStore('cart', {
+```ts
+const useSettingsStore = defineStore('settings', {
   state: () => ({
-    items: [] as Array<{ id: string; name: string; price: number; quantity: number }>,
-    isOpen: false
+    theme: 'system' as 'light' | 'dark' | 'system',
   }),
-  getters: {
-    totalItems: (state) => state.items.reduce((sum, item) => sum + item.quantity, 0),
-    totalPrice: (state) => state.items.reduce((sum, item) => sum + (item.price * item.quantity), 0)
-  },
   actions: {
-    addItem(item: { id: string; name: string; price: number }) {
-      const existingItem = this.items.find(i => i.id === item.id);
-      if (existingItem) {
-        existingItem.quantity++;
-      } else {
-        this.items.push({ ...item, quantity: 1 });
-      }
+    setTheme(theme: 'light' | 'dark' | 'system') {
+      this.theme = theme;
     },
-    removeItem(id: string) {
-      this.items = this.items.filter(item => item.id !== id);
-    },
-    toggleCart() {
-      this.isOpen = !this.isOpen;
-    }
+  },
+});
+```
+
+React hooks preserve that type information:
+
+```tsx
+const theme = useQuantaValue(
+  useSettingsStore,
+  (state) => state.theme,
+);
+
+const settings = useQuantaActions(useSettingsStore);
+settings.setTheme('dark');
+```
+
+## Testing
+
+For store tests, create a fresh container per test.
+
+```ts
+import { createContainer } from '@quantajs/core';
+
+it('logs out', () => {
+  const container = createContainer();
+
+  try {
+    const user = useUserStore(container);
+    user.user = {
+      id: '1',
+      name: 'Ada',
+      email: 'ada@example.com',
+    };
+
+    user.logout();
+
+    expect(user.user).toBeNull();
+  } finally {
+    container.dispose();
   }
 });
 ```
 
-### Custom Provider with Multiple Stores
+For component tests, wrap the component in `QuantaProvider` just as the real application does.
 
-```typescript:app/providers.tsx
-'use client';
+## Performance checklist
 
-import { QuantaProvider } from '@quantajs/react';
-import { userStore } from '@/lib/stores/user-store';
-import { cartStore } from '@/lib/stores/cart-store';
+- Use `useQuantaValue` when a component reads only a slice of state.
+- Use `useQuantaActions` for dispatch-only components.
+- Keep store definitions at module scope.
+- Use `useLocalStore` for component-owned state.
+- Create one server container per request.
+- Dehydrate before disposing the server container.
+- Keep snapshots serializable.
+- Measure before splitting subscriptions further.
 
-export function Providers({ children }: { children: React.ReactNode }) {
-  return (
-    <QuantaProvider stores={{ user: userStore, cart: cartStore }}>
-      {children}
-    </QuantaProvider>
-  );
-}
-```
+## Common troubleshooting
 
-### Using Direct Store References
+### Hydration mismatch
 
-For components that need access to multiple stores:
+Make sure the server fills store state before calling `dehydrate()`, and pass that snapshot directly to `QuantaProvider` rather than applying it later in an effect.
 
-```typescript:app/components/header.tsx
-'use client';
+### One user's data appears in another request
 
-import { useQuantaSelector } from '@quantajs/react';
-import { userStore } from '@/lib/stores/user-store';
-import { cartStore } from '@/lib/stores/cart-store';
+Search server code for store definitions being resolved without an explicit container.
 
-export function Header() {
-  const user = useQuantaSelector(userStore, store => store.user);
-  const cartItems = useQuantaSelector(cartStore, store => store.totalItems);
-  const isCartOpen = useQuantaSelector(cartStore, store => store.isOpen);
-  
-  return (
-    <header>
-      <div>Welcome, {user?.name || 'Guest'}</div>
-      <button onClick={() => cartStore.toggleCart()}>
-        Cart ({cartItems})
-      </button>
-    </header>
-  );
-}
-```
+### State resets on navigation
 
-## Performance Optimization
+Decide whether that state is request-owned or browser-owned. Request-scoped server containers are intentionally short-lived. State that must survive client navigation belongs in the client provider's container or persistence layer.
 
-### Selective Re-rendering
+### A container reports that it is disposed
 
-Use selectors to prevent unnecessary re-renders:
-
-```typescript:app/components/cart-summary.tsx
-'use client';
-
-import { useQuantaSelector } from '@quantajs/react';
-import { cartStore } from '@/lib/stores/cart-store';
-
-export function CartSummary() {
-  // Only re-render when totalPrice changes
-  const totalPrice = useQuantaSelector(cartStore, store => store.totalPrice);
-  
-  return (
-    <div>
-      <h3>Cart Total: ${totalPrice.toFixed(2)}</h3>
-    </div>
-  );
-}
-```
-
-### Component-Scoped Stores
-
-For local state that doesn't need to be shared:
-
-```typescript:app/components/todo-list.tsx
-'use client';
-
-import { useCreateStore } from '@quantajs/react';
-
-export function TodoList() {
-  const todoStore = useCreateStore(
-    'todos',
-    () => ({ todos: [], filter: 'all' }),
-    {
-      filteredTodos: (state) => {
-        switch (state.filter) {
-          case 'active': return state.todos.filter(t => !t.completed);
-          case 'completed': return state.todos.filter(t => t.completed);
-          default: return state.todos;
-        }
-      }
-    },
-    {
-      addTodo(text: string) {
-        this.todos.push({ id: Date.now(), text, completed: false });
-      },
-      toggleTodo(id: number) {
-        const todo = this.todos.find(t => t.id === id);
-        if (todo) todo.completed = !todo.completed;
-      }
-    }
-  );
-  
-  return (
-    <div>
-      {/* Todo list implementation */}
-    </div>
-  );
-}
-```
-
-## Best Practices
-
-### 1. **Store Organization**
-- Keep stores focused on specific domains
-- Use descriptive names for stores and actions
-- Separate business logic from UI logic
-
-### 2. **TypeScript Integration**
-- Define proper types for your store state
-- Use TypeScript for better developer experience
-
-```typescript:types/user.ts
-interface User {
-  id: string;
-  name: string;
-  email: string;
-}
-
-interface UserState {
-  user: User | null;
-  isAuthenticated: boolean;
-  preferences: {
-    theme: 'light' | 'dark';
-    language: string;
-  };
-}
-```
-
-### 3. **Error Handling**
-- Implement proper error handling in store actions
-- Use try-catch blocks for async operations
-
-### 4. **Testing**
-- Test stores independently from React components
-- Use the core package for unit testing
+The code is trying to resolve or use request-scoped state after the server container's lifecycle ended. Take the snapshot before disposal and do not pass the container itself to a client component.
 
 ## Conclusion
 
-QuantaJS and Next.js make a powerful combination for building modern web applications. The framework-agnostic core of QuantaJS works seamlessly with Next.js's server and client components, while the React integration provides a familiar developer experience.
+QuantaJS 3.x and Next.js work best when ownership is explicit:
 
-By following the patterns and best practices outlined in this guide, you can build scalable, performant Next.js applications with robust state management. The modular architecture of QuantaJS allows you to start simple and scale up as your application grows.
+- store definitions are module-scoped;
+- server state lives in a container created for one request;
+- snapshots cross the Server Component boundary as data;
+- client components resolve state through `QuantaProvider`;
+- subscriptions are narrowed only where it matters.
 
-Ready to get started? Check out our [Next.js integration guide](/docs/integration/nextjs-integration) for more detailed examples and advanced patterns! 
+That model keeps Next.js state predictable, prevents cross-request leaks, and scales from small client-only pages to SSR-heavy applications.
+
+For the framework reference and runnable example, see the [Next.js integration guide](/docs/integration/nextjs-integration).
