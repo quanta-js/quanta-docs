@@ -12,498 +12,455 @@ cover: "https://images.pexels.com/photos/17677900/pexels-photo-17677900.jpeg"
 
 # Performance Optimization with QuantaJS: A Complete Guide
 
-<Note type="warning" title="Written for QuantaJS 2.0">
-The code in this post uses the 2.0 API. `useStore`, `useStoreSelector` and
-`useCreateStore` were removed from `@quantajs/react` in 2.1, and
-`<QuantaProvider>` no longer takes a `stores` prop. See the
-[2.1 migration guide](/docs/getting-started/migration-2-1) for the current
-equivalents.
-</Note>
+Performance is crucial for smooth, responsive applications. QuantaJS 3.x tracks store dependencies and gives React components a few different subscription tools, so most performance work is about choosing the narrowest subscription that still keeps the component correct.
 
-
-Performance is crucial for creating smooth, responsive user experiences. QuantaJS is designed with performance in mind, but understanding how to use it effectively can make a significant difference in your application's speed and responsiveness. In this guide, we'll explore practical strategies to optimize your QuantaJS applications.
+The examples below use store definitions created with `defineStore`, then resolve them through the 3.x React hooks.
 
 ## Understanding QuantaJS Performance Characteristics
 
-QuantaJS uses a reactive system that tracks dependencies and only updates what's necessary. However, like any state management solution, improper usage can lead to performance issues. Let's explore how to avoid common pitfalls and maximize performance.
+A store definition is cheap to keep at module scope. State lives in a container when the definition is resolved. In React:
+
+- `useQuanta(definition)` subscribes to the whole store.
+- `useQuantaValue(definition, selector)` subscribes only to the selected value.
+- `useQuantaActions(definition)` returns actions without subscribing to state.
+- `useLocalStore(definition)` creates component-owned store state.
+
+That gives you an explicit way to trade convenience for subscription precision.
 
 ## 1. Use Selectors for Fine-Grained Updates
 
-One of the most important performance optimizations is using selectors to subscribe only to the data you need.
+When a component only needs one slice of a frequently changing store, subscribe to that slice.
 
-### ❌ Bad: Subscribing to Entire Store
+### ❌ Broad subscription
 
-```javascript
+```tsx
 function UserProfile() {
-  const store = useStore('user');
-  
-  // Component re-renders on ANY store change
-  return <div>{store.name}</div>;
+  const user = useQuanta(useUserStore);
+
+  // Re-renders whenever the resolved store notifies.
+  return <div>{user.name}</div>;
 }
 ```
 
-### ✅ Good: Using Selectors
+### ✅ Fine-grained subscription
 
-```javascript
+```tsx
 function UserProfile() {
-  // Only re-renders when name changes
-  const name = useStoreSelector('user', store => store.name);
-  
+  const name = useQuantaValue(useUserStore, (state) => state.name);
+
   return <div>{name}</div>;
 }
 ```
 
-### Real-World Example: Todo List
+### Real-world example: todo list
 
-```javascript
-// ❌ Bad: Re-renders entire list when any todo changes
+```tsx
+const useTodosStore = defineStore('todos', {
+  state: () => ({
+    todos: [] as Array<{ id: string; text: string; done: boolean }>,
+  }),
+});
+
 function TodoList() {
-  const store = useStore('todos');
-  
+  const todos = useQuantaValue(useTodosStore, (state) => state.todos);
+
   return (
     <ul>
-      {store.todos.map(todo => (
-        <TodoItem key={todo.id} todo={todo} />
+      {todos.map((todo) => (
+        <TodoItem key={todo.id} todoId={todo.id} />
       ))}
     </ul>
   );
 }
 
-// ✅ Good: Only re-renders when todos array changes
-function TodoList() {
-  const todos = useStoreSelector('todos', store => store.todos);
-  
-  return (
-    <ul>
-      {todos.map(todo => (
-        <TodoItem key={todo.id} todo={todo} />
-      ))}
-    </ul>
+function TodoItem({ todoId }: { todoId: string }) {
+  const todo = useQuantaValue(
+    useTodosStore,
+    (state) => state.todos.find((item) => item.id === todoId),
   );
-}
 
-// ✅ Better: Individual items only re-render when their data changes
-function TodoItem({ todoId }) {
-  const todo = useStoreSelector('todos', store => 
-    store.todos.find(t => t.id === todoId)
-  );
-  
   return <li>{todo?.text}</li>;
 }
 ```
 
+The list watches the array, while each row selects only the item it displays.
+
 ## 2. Optimize Computed Values (Getters)
 
-Computed values are cached and only recalculate when dependencies change. Use them effectively:
+Put reusable derived state in getters instead of recomputing it in every component.
 
-### ✅ Good: Computed Values for Derived State
-
-```javascript
-const todoStore = createStore('todos', {
+```ts
+const useTodosStore = defineStore('todos', {
   state: () => ({
-    todos: [],
-    filter: 'all'
+    todos: [] as Array<{ id: string; done: boolean }>,
+    filter: 'all' as 'all' | 'active' | 'completed',
   }),
   getters: {
-    // Only recalculates when todos or filter changes
     filteredTodos: (state) => {
-      switch (state.filter) {
-        case 'active':
-          return state.todos.filter(t => !t.done);
-        case 'completed':
-          return state.todos.filter(t => t.done);
-        default:
-          return state.todos;
+      if (state.filter === 'active') {
+        return state.todos.filter((todo) => !todo.done);
       }
+      if (state.filter === 'completed') {
+        return state.todos.filter((todo) => todo.done);
+      }
+      return state.todos;
     },
-    // Cached until dependencies change
-    completedCount: (state) => 
-      state.todos.filter(t => t.done).length,
-    activeCount: (state) => 
-      state.todos.filter(t => !t.done).length
-  }
+    completedCount: (state) => state.todos.filter((todo) => todo.done).length,
+  },
 });
 ```
 
-### ❌ Avoid: Expensive Operations in Components
+Then select the getter directly:
 
-```javascript
-// ❌ Bad: Recalculates on every render
+```tsx
 function TodoStats() {
-  const todos = useStoreSelector('todos', store => store.todos);
-  const completed = todos.filter(t => t.done).length; // Expensive!
-  
-  return <div>Completed: {completed}</div>;
-}
+  const completedCount = useQuantaValue(
+    useTodosStore,
+    (state) => state.completedCount,
+  );
 
-// ✅ Good: Use computed getter
-function TodoStats() {
-  const completedCount = useStoreSelector('todos', store => store.completedCount);
-  
   return <div>Completed: {completedCount}</div>;
 }
 ```
 
+This keeps the derivation next to the state model and avoids duplicating the same filter logic across components.
+
 ## 3. Optimize Watch Usage
 
-The `watch` function is powerful but can impact performance if not used carefully.
+Watch the smallest value that represents the side effect you care about.
 
-### ✅ Good: Specific Watchers
+```tsx
+function ThemeBridge() {
+  const settings = useQuanta(useSettingsStore);
 
-```javascript
-// Only watches specific value
-watch(() => userStore.userId, (userId) => {
-  if (userId) {
-    fetchUserData(userId);
-  }
-});
+  useEffect(() => {
+    const stop = watch(
+      () => settings.preferences.theme,
+      (theme) => applyTheme(theme),
+    );
+
+    return stop;
+  }, [settings]);
+
+  return null;
+}
 ```
 
-### ❌ Avoid: Watching Large Objects
+Avoid watching a whole large object when one property is enough. If multiple values matter, return a small tuple or object and use an equality function appropriate for that value.
 
-```javascript
-// ❌ Bad: Watches entire large object
-watch(() => appStore, (store) => {
-  // This triggers on ANY change to the store
-  console.log('Store changed');
-});
-
-// ✅ Good: Watch specific values
-watch(() => appStore.currentView, (view) => {
-  console.log('View changed:', view);
-});
-```
-
-### Deep Watching Considerations
-
-```javascript
-// ⚠️ Use deep watching sparingly - it uses polling
-watch(() => settingsStore.preferences, (prefs) => {
-  // Only use deep: true when necessary
-}, { deep: true });
-
-// ✅ Better: Watch specific nested properties
-watch(() => settingsStore.preferences.theme, (theme) => {
-  applyTheme(theme);
-});
-```
+QuantaJS 3.x also lets `watch` take `equals`, so a shallow comparison can be used where reference equality would create unnecessary work.
 
 ## 4. Store Organization Strategies
 
-How you organize your stores can significantly impact performance.
+Prefer domain stores over one application-wide mega-store.
 
-### ✅ Good: Domain-Based Stores
+```ts
+const useUserStore = defineStore('user', {
+  state: () => ({ name: '', email: '' }),
+});
 
-```javascript
-// Separate stores by domain
-const userStore = createStore('user', { /* ... */ });
-const cartStore = createStore('cart', { /* ... */ });
-const settingsStore = createStore('settings', { /* ... */ });
+const useCartStore = defineStore('cart', {
+  state: () => ({ items: [] as Array<{ id: string; price: number }> }),
+  getters: {
+    total: (state) => state.items.reduce((sum, item) => sum + item.price, 0),
+  },
+});
 
-// Components only subscribe to what they need
+const useSettingsStore = defineStore('settings', {
+  state: () => ({ theme: 'system' }),
+});
+```
+
+A cart component can now subscribe only to the cart:
+
+```tsx
 function CartSummary() {
-  const total = useStoreSelector('cart', store => store.total);
+  const total = useQuantaValue(useCartStore, (state) => state.total);
   return <div>Total: ${total}</div>;
 }
 ```
 
-### ❌ Avoid: Monolithic Stores
-
-```javascript
-// ❌ Bad: One giant store
-const appStore = createStore('app', {
-  state: () => ({
-    user: { /* ... */ },
-    cart: { /* ... */ },
-    settings: { /* ... */ },
-    todos: { /* ... */ },
-    // ... everything in one store
-  })
-});
-
-// Any change triggers re-renders in all components
-```
+The user and settings stores can change without waking this component.
 
 ## 5. Minimize State Updates
 
-Reduce the number of state updates by batching changes when possible.
+Group related writes inside one action when they belong to the same logical operation.
 
-### ✅ Good: Batch Updates
-
-```javascript
-const todoStore = createStore('todos', {
-  state: () => ({ todos: [] }),
+```ts
+const useTodosStore = defineStore('todos', {
+  state: () => ({
+    todos: [] as Array<{ id: string; text: string }>,
+    filter: 'all',
+  }),
   actions: {
-    // Single update instead of multiple
-    addMultipleTodos(newTodos) {
+    addMultipleTodos(newTodos: Array<{ id: string; text: string }>) {
       this.todos = [...this.todos, ...newTodos];
     },
-    
-    // Batch filter updates
-    updateFilters(filters) {
-      Object.assign(this.filters, filters);
-    }
-  }
+    applyView(filter: string) {
+      this.filter = filter;
+    },
+  },
 });
 ```
 
-### ❌ Avoid: Multiple Sequential Updates
+Dispatch without subscribing when a component only needs actions:
 
-```javascript
-// ❌ Bad: Multiple updates trigger multiple re-renders
-function addTodos() {
-  todoStore.addTodo(todo1); // Re-render
-  todoStore.addTodo(todo2); // Re-render
-  todoStore.addTodo(todo3); // Re-render
-}
+```tsx
+function ImportTodosButton({ todos }) {
+  const actions = useQuantaActions(useTodosStore);
 
-// ✅ Good: Single batch update
-function addTodos() {
-  todoStore.addMultipleTodos([todo1, todo2, todo3]); // One re-render
-}
-```
-
-## 6. Use Component-Scoped Stores When Appropriate
-
-For local state that doesn't need to be shared, use component-scoped stores.
-
-### ✅ Good: Component-Scoped State
-
-```javascript
-function TodoForm() {
-  // Local state - doesn't affect other components
-  const formStore = useCreateStore('todo-form', () => ({
-    text: '',
-    priority: 'medium'
-  }));
-  
   return (
-    <form>
-      <input 
-        value={formStore.text}
-        onChange={(e) => formStore.text = e.target.value}
-      />
-    </form>
+    <button onClick={() => actions.addMultipleTodos(todos)}>
+      Import todos
+    </button>
   );
 }
 ```
 
-### When to Use Component-Scoped vs Global Stores
+Using `useQuantaActions` avoids a state subscription for dispatch-only UI.
 
-- **Component-Scoped**: Form state, UI state (modals, dropdowns), temporary data
-- **Global Stores**: User data, cart, settings, shared application state
+## 6. Use Component-Scoped Stores When Appropriate
+
+For state that belongs to one mounted component, define the store at module scope and resolve it with `useLocalStore`.
+
+```tsx
+const useTodoFormStore = defineStore('todo-form', {
+  state: () => ({
+    text: '',
+    priority: 'medium' as 'low' | 'medium' | 'high',
+  }),
+  actions: {
+    setText(text: string) {
+      this.text = text;
+    },
+  },
+});
+
+function TodoForm() {
+  const form = useLocalStore(useTodoFormStore);
+
+  return (
+    <input
+      value={form.text}
+      onChange={(event) => form.setText(event.target.value)}
+    />
+  );
+}
+```
+
+Each `<TodoForm />` gets its own container-backed store, and QuantaJS disposes it with the component.
+
+Use local stores for form drafts, modal state, wizards, and other state that should not be shared globally.
 
 ## 7. Optimize Persistence
 
-Persistence can impact performance if not configured properly.
+Persist only the state that must survive a reload.
 
-### ✅ Good: Selective Persistence
-
-```javascript
-const appStore = createStore('app', {
+```ts
+const useAppStore = defineStore('app', {
   state: () => ({
-    user: null,
-    settings: {},
-    temporaryData: [],
-    cache: new Map()
+    user: null as { id: string; name: string } | null,
+    settings: { theme: 'system' },
+    temporaryData: [] as string[],
   }),
   persist: {
     adapter: new LocalStorageAdapter('app-store'),
-    // Only persist what's necessary
     include: ['user', 'settings'],
-    exclude: ['temporaryData', 'cache'],
-    // Debounce saves
-    debounceMs: 500
-  }
+    debounceMs: 500,
+  },
 });
 ```
 
-### ⚠️ Avoid: Persisting Everything
-
-```javascript
-// ❌ Bad: Persisting large, frequently-changing data
-persist: {
-  adapter: new LocalStorageAdapter('store'),
-  // Persists everything, including large arrays
-}
-```
+In 3.x, persistence options are typed from the store state. Keep the persisted slice small and serializable, and leave caches or short-lived request state out of it.
 
 ## 8. Performance Monitoring
 
-Use QuantaJS logger to monitor performance in development.
+Measure before optimizing. Browser DevTools and the QuantaJS logger are useful for finding repeated actions or unexpected subscriptions.
 
-```javascript
+```ts
 import { logger, LogLevel } from '@quantajs/core';
 
-// Configure logger for development
 if (process.env.NODE_ENV === 'development') {
   logger.configure({
     level: LogLevel.DEBUG,
-    prefix: 'Performance'
+    prefix: 'Performance',
   });
 }
+```
 
-// Log store operations
-const todoStore = createStore('todos', {
-  state: () => ({ todos: [] }),
-  actions: {
-    addTodo(text) {
-      const start = performance.now();
-      this.todos.push({ id: Date.now(), text });
-      const end = performance.now();
-      logger.debug(`addTodo took ${end - start}ms`);
-    }
-  }
-});
+For application-specific measurements, use the platform Performance API around the operation you are investigating instead of adding permanent timing logic to every action.
+
+```ts
+const started = performance.now();
+await loadProducts();
+console.debug('loadProducts', performance.now() - started);
 ```
 
 ## 9. React-Specific Optimizations
 
-### Use useQuantaStore for Direct Store References
+Choose the React hook by subscription intent.
 
-```javascript
-// ✅ Good: Direct store reference with selector
+```tsx
 function CartIcon() {
-  const itemCount = useQuantaSelector(cartStore, store => store.itemCount);
+  const itemCount = useQuantaValue(
+    useCartStore,
+    (state) => state.items.length,
+  );
+
   return <span>{itemCount}</span>;
 }
-
-// This avoids context lookups and is more performant
 ```
 
-### Memoize Expensive Selectors
+For a component that needs several related values, select them together and provide an equality function when appropriate:
 
-```javascript
-import { useMemo } from 'react';
+```tsx
+import { shallow } from '@quantajs/core';
 
-function ExpensiveComponent() {
-  const todos = useStoreSelector('todos', store => store.todos);
-  
-  // Memoize expensive computations
-  const expensiveValue = useMemo(() => {
-    return todos
-      .filter(/* complex filter */)
-      .map(/* complex map */)
-      .reduce(/* complex reduce */);
-  }, [todos]);
-  
-  return <div>{expensiveValue}</div>;
+function AccountSummary() {
+  const summary = useQuantaValue(
+    useUserStore,
+    (state) => ({ name: state.name, email: state.email }),
+    { equalityFn: shallow },
+  );
+
+  return (
+    <p>
+      {summary.name} — {summary.email}
+    </p>
+  );
 }
 ```
+
+For expensive computations that are truly component-specific rather than store-derived, normal React tools such as `useMemo` still apply.
 
 ## 10. Best Practices Summary
 
-### ✅ Do's
+### ✅ Do
 
-- Use selectors to subscribe only to needed data
-- Leverage computed values (getters) for derived state
-- Organize stores by domain
-- Use component-scoped stores for local state
-- Batch related state updates
-- Configure persistence selectively
-- Use `useQuantaStore` for direct store access when appropriate
+- Define stores once with `defineStore`.
+- Use `useQuantaValue` for narrow state subscriptions.
+- Use `useQuantaActions` for dispatch-only components.
+- Use getters for reusable derived state.
+- Organize stores by domain.
+- Use `useLocalStore` for component-owned state.
+- Persist only the state that needs to survive reloads.
+- Measure before optimizing.
 
-### ❌ Don'ts
+### ❌ Avoid
 
-- Don't subscribe to entire stores when you only need specific values
-- Don't perform expensive calculations in components
-- Don't watch large objects unnecessarily
-- Don't create monolithic stores
-- Don't persist everything
-- Don't make multiple sequential updates when you can batch them
+- Subscribing to an entire store when one value is enough.
+- Repeating expensive derived calculations in several components.
+- Watching large objects when a smaller source is available.
+- Putting unrelated domains into one giant store.
+- Persisting caches and temporary state.
+- Creating local store definitions during render.
+- Optimizing based on assumptions instead of measurements.
 
 ## Real-World Example: Optimized E-Commerce Store
 
-```javascript
-// Optimized store structure
-const productStore = createStore('products', {
+```tsx
+const useProductStore = defineStore('products', {
   state: () => ({
-    products: [],
-    filters: { category: 'all', priceRange: [0, 1000] },
-    sortBy: 'name'
+    products: [] as Array<{
+      id: string;
+      name: string;
+      category: string;
+      price: number;
+    }>,
+    filters: {
+      category: 'all',
+      priceRange: [0, 1000] as [number, number],
+    },
   }),
   getters: {
-    // Computed: Only recalculates when dependencies change
-    filteredProducts: (state) => {
-      return state.products
-        .filter(p => {
-          const categoryMatch = state.filters.category === 'all' || 
-                               p.category === state.filters.category;
-          const priceMatch = p.price >= state.filters.priceRange[0] && 
-                            p.price <= state.filters.priceRange[1];
-          return categoryMatch && priceMatch;
-        })
-        .sort((a, b) => {
-          // Sort logic based on sortBy
-        });
-    },
-    productCount: (state) => state.products.length
+    filteredProducts: (state) =>
+      state.products.filter((product) => {
+        const categoryMatches =
+          state.filters.category === 'all' ||
+          product.category === state.filters.category;
+        const priceMatches =
+          product.price >= state.filters.priceRange[0] &&
+          product.price <= state.filters.priceRange[1];
+        return categoryMatches && priceMatches;
+      }),
   },
   actions: {
-    // Batch filter updates
-    updateFilters(newFilters) {
-      Object.assign(this.filters, newFilters);
-    }
-  }
+    updateFilters(filters: Partial<{ category: string; priceRange: [number, number] }>) {
+      Object.assign(this.filters, filters);
+    },
+  },
 });
 
-// Optimized components
 function ProductList() {
-  // Only subscribes to filtered products
-  const products = useStoreSelector('products', store => store.filteredProducts);
-  
+  const products = useQuantaValue(
+    useProductStore,
+    (state) => state.filteredProducts,
+  );
+
   return (
     <div>
-      {products.map(product => (
+      {products.map((product) => (
         <ProductCard key={product.id} productId={product.id} />
       ))}
     </div>
   );
 }
 
-function ProductCard({ productId }) {
-  // Individual cards only re-render when their product changes
-  const product = useStoreSelector('products', store => 
-    store.products.find(p => p.id === productId)
+function ProductCard({ productId }: { productId: string }) {
+  const product = useQuantaValue(
+    useProductStore,
+    (state) => state.products.find((item) => item.id === productId),
   );
-  
+
   return <div>{product?.name}</div>;
 }
 
 function ProductFilters() {
-  // Only subscribes to filter state
-  const filters = useStoreSelector('products', store => store.filters);
-  const updateFilters = useStoreSelector('products', store => store.updateFilters);
-  
+  const filters = useQuantaValue(
+    useProductStore,
+    (state) => state.filters,
+  );
+  const actions = useQuantaActions(useProductStore);
+
   return (
-    <div>
-      {/* Filter UI */}
-    </div>
+    <button
+      onClick={() =>
+        actions.updateFilters({
+          ...filters,
+          category: 'featured',
+        })
+      }
+    >
+      Show featured
+    </button>
   );
 }
 ```
 
 ## Performance Checklist
 
-Before deploying your QuantaJS application, check:
+Before deploying, check:
 
-- [ ] Are you using selectors instead of subscribing to entire stores?
-- [ ] Are expensive calculations in computed getters?
+- [ ] Do narrow components use `useQuantaValue` instead of a broad subscription?
+- [ ] Are reusable derived calculations modeled as getters?
 - [ ] Are stores organized by domain?
-- [ ] Is persistence configured selectively?
-- [ ] Are state updates batched when possible?
-- [ ] Are you using component-scoped stores for local state?
-- [ ] Are watch functions watching specific values?
-- [ ] Is deep watching used only when necessary?
+- [ ] Is persistence limited to necessary state?
+- [ ] Are dispatch-only components using `useQuantaActions`?
+- [ ] Is component-owned state using `useLocalStore`?
+- [ ] Are watchers scoped to the smallest useful source?
+- [ ] Have the suspected bottlenecks been measured?
 
 ## Conclusion
 
-Performance optimization in QuantaJS is about understanding how reactivity works and using the right patterns for your use case. By following these guidelines, you can build fast, responsive applications that scale well.
+Performance optimization in QuantaJS 3.x is mostly about subscription precision and keeping state boundaries clear.
 
 Remember:
-- **Measure first**: Use browser DevTools to identify bottlenecks
-- **Optimize incrementally**: Don't over-optimize prematurely
-- **Test performance**: Monitor your app's performance in production
+
+- **Measure first.**
+- **Subscribe narrowly.**
+- **Keep definitions at module scope.**
+- **Use local stores for local ownership.**
+- **Keep persistence small.**
+- **Optimize incrementally.**
 
 Happy optimizing! 🚀
-
