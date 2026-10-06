@@ -25,6 +25,11 @@ export const ROUTES: EachRoute[] = [
                 href: "/migration",
                 tag: "New!",
             },
+            {
+                title: "Migrating from Pinia",
+                href: "/migrating-from-pinia",
+                tag: "New!",
+            },
             { title: "Migrating to 2.1", href: "/migration-2-1" },
         ],
     },

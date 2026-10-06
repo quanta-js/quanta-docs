@@ -1,0 +1,195 @@
+---
+title: Migrating from Pinia
+description: Map Pinia option stores and Vue usage to QuantaJS 3.x.
+---
+
+# Migrating from Pinia
+
+Pinia option stores and QuantaJS stores are deliberately similar: both use a
+named `defineStore` call with `state`, `getters`, and `actions`. The main
+migration work is how a component resolves and subscribes to a store, not how
+the store itself is shaped.
+
+## Install the QuantaJS packages
+
+For Vue applications:
+
+```bash
+npm install @quantajs/core @quantajs/vue
+```
+
+For React, use `@quantajs/react` instead of `@quantajs/vue`.
+
+## Store definitions stay close to Pinia
+
+A Pinia option store:
+
+```ts
+// Pinia
+import { defineStore } from 'pinia';
+
+export const useCartStore = defineStore('cart', {
+  state: () => ({
+    items: [] as { name: string; price: number }[],
+  }),
+  getters: {
+    total: (state) => state.items.reduce((sum, item) => sum + item.price, 0),
+  },
+  actions: {
+    add(name: string, price: number) {
+      this.items.push({ name, price });
+    },
+  },
+});
+```
+
+The QuantaJS definition has the same option-store shape:
+
+```ts
+// QuantaJS
+import { defineStore } from '@quantajs/core';
+
+export const useCartStore = defineStore('cart', {
+  state: () => ({
+    items: [] as { name: string; price: number }[],
+  }),
+  getters: {
+    total: (state) => state.items.reduce((sum, item) => sum + item.price, 0),
+  },
+  actions: {
+    add(name: string, price: number) {
+      this.items.push({ name, price });
+    },
+  },
+});
+```
+
+`this` in actions, `$patch`, and `$reset` remain available, so option stores
+usually move with little or no structural change.
+
+## Application setup
+
+Pinia installs a global plugin:
+
+```ts
+const pinia = createPinia();
+app.use(pinia);
+```
+
+A client-only QuantaJS Vue app does not need a plugin. Components resolve
+stores against the default container.
+
+For server-rendered Vue applications, use `createQuanta()` instead. Create it
+per request so server requests never share store state:
+
+```ts
+import { createSSRApp } from 'vue';
+import { createQuanta } from '@quantajs/vue';
+
+const app = createSSRApp(App);
+const quanta = createQuanta();
+app.use(quanta);
+```
+
+See [Vue integration](/docs/integration/vue-integration) and
+[server-side rendering](/docs/guides/ssr) for hydration and request-scoped
+container details.
+
+## Reading state in components
+
+With Pinia you typically call the store and optionally use `storeToRefs`.
+
+With QuantaJS, choose a framework binding based on what the component needs:
+
+- `useQuanta(definition)` subscribes to the whole store.
+- `useQuantaValue(definition, selector)` subscribes only to the selected value.
+- `useQuantaActions(definition)` resolves the store without subscribing the
+  component to state changes.
+- `useLocalStore(definition)` creates a store owned by one component instance.
+
+Vue example:
+
+```html
+<script setup lang="ts">
+import { useQuantaActions, useQuantaValue } from '@quantajs/vue';
+import { useCartStore } from './stores/cart';
+
+const total = useQuantaValue(useCartStore, (state) => state.total);
+const cart = useQuantaActions(useCartStore);
+</script>
+
+<template>
+  <p>Total: {{ total }}</p>
+  <button @click="cart.add('Tea', 4)">Add tea</button>
+</template>
+```
+
+React uses the same definitions with the React bindings:
+
+```tsx
+import { useQuantaActions, useQuantaValue } from '@quantajs/react';
+import { useCartStore } from './stores/cart';
+
+export function Cart() {
+  const total = useQuantaValue(useCartStore, (state) => state.total);
+  const cart = useQuantaActions(useCartStore);
+
+  return (
+    <button onClick={() => cart.add('Tea', 4)}>
+      Total: {total}
+    </button>
+  );
+}
+```
+
+## Common Pinia mappings
+
+| Pinia | QuantaJS 3.x |
+| --- | --- |
+| `defineStore(name, options)` | `defineStore(name, options)` |
+| `store.$patch(...)` | `store.$patch(...)` |
+| `store.$reset()` | `store.$reset()` |
+| `storeToRefs(store)` | `useQuantaValue(definition, selector)` for the values a component reads |
+| `store.$subscribe(...)` | `store.subscribe(...)` |
+| `createPinia()` | No plugin for client-only apps; `createQuanta()` for Vue SSR/app-scoped containers |
+| `useCartStore()` inside Vue components | `useQuanta(useCartStore)`, `useQuantaValue(...)`, or `useQuantaActions(...)` |
+
+## Features without a direct Pinia equivalent
+
+QuantaJS 3.x also provides:
+
+- official React, Vue, Svelte, Lit, and Astro bindings;
+- explicit containers, including a container per server request;
+- built-in async-action lifecycle state such as `pending` and `error`;
+- built-in persistence through the store `persist` option.
+
+## Pinia features that do not have a direct QuantaJS equivalent
+
+Do not mechanically translate these APIs:
+
+- setup stores (the function form of `defineStore`);
+- Pinia plugins;
+- `$onAction`;
+- Options API helpers such as `mapState` and `mapActions`.
+
+Refactor those usages around QuantaJS store definitions, framework bindings,
+`subscribe`, or application-level utilities as appropriate.
+
+## Server safety
+
+A server must not resolve user-specific stores against one shared default
+container. Create a container per request, or use the framework integration that
+does so for you. See [Containers](/docs/api/containers) for the request-scoped
+patterns.
+
+## Migration checklist
+
+1. Move each option store to `@quantajs/core`'s `defineStore`.
+2. Replace Pinia component access with the appropriate QuantaJS framework
+   binding.
+3. Replace `storeToRefs` with focused `useQuantaValue` selectors.
+4. Replace `$subscribe` with `subscribe` where you need coarse change
+   notifications.
+5. Review setup stores, plugins, `$onAction`, and map helpers manually.
+6. If the app renders on a server, introduce one container per request.
+7. Run the application and its tests before removing Pinia.
