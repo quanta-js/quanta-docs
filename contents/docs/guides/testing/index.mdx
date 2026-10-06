@@ -47,6 +47,27 @@ test('actions and getters use isolated state', () => {
 
 This replaces the shared-store reset patterns used by QuantaJS 2.x tests.
 
+## Setup
+
+Install Vitest and testing utilities:
+
+```bash
+npm install -D vitest jsdom @testing-library/react @testing-library/user-event
+```
+
+For component tests, configure Vitest with a DOM environment in `vitest.config.ts`:
+
+```ts
+// vitest.config.ts
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    environment: 'jsdom',
+  },
+});
+```
+
 ## Test isolation
 
 Two containers resolve two independent instances of the same definition:
@@ -160,8 +181,8 @@ test('abort cancels an in-flight action', async () => {
     actions: {
       async search() {
         await new Promise<void>((resolve, reject) => {
-          this.$signal.addEventListener('abort', () => {
-            reject(this.$signal.reason);
+          this.$signal?.addEventListener('abort', () => {
+            reject(this.$signal?.reason);
           });
         });
         this.done = true;
@@ -231,13 +252,14 @@ test('persisted state can be saved and restored', async () => {
   const first = createContainer();
   const source = useSettingsStore(first);
   source.dark();
-  await source.$persist.save();
+  // $persist is available because persist is configured on this store
+  await source.$persist?.save();
   first.dispose();
 
   const second = createContainer();
   try {
     const restored = useSettingsStore(second);
-    await restored.$persist.load();
+    await restored.$persist?.load();
 
     expect(restored.theme).toBe('dark');
   } finally {
@@ -294,7 +316,7 @@ test('component uses the provider container', async () => {
 
     await user.click(screen.getByRole('button', { name: 'Add' }));
 
-    expect(screen.getByLabelText('cart count')).toHaveTextContent('1');
+    expect(screen.getByLabelText('cart count').textContent).toBe('1');
     expect(useCartStore(container).count).toBe(1);
   } finally {
     container.dispose();
