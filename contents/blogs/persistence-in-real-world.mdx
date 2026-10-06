@@ -257,8 +257,9 @@ const useSessionStore = defineStore('session', {
   }),
   persist: {
     adapter: new LocalStorageAdapter('session'),
-    validator: (data) =>
-      data.user === null || typeof data.user?.id === 'string',
+    validator: ({ user }) =>
+      user === null ||
+      (typeof user === 'object' && 'id' in user && typeof user.id === 'string'),
     onError: (error, operation) => {
       console.error(`Persistence ${operation} failed`, error);
     },
