@@ -1,49 +1,102 @@
 ---
 title: Contributing
-description: How to contribute to QuantaJS.
+description: How to contribute to the QuantaJS documentation site.
 ---
 
 # Contributing
 
-We welcome contributions to QuantaJS! Here's how you can help:
+We welcome contributions to the QuantaJS documentation site.
+
+## Contributing to the library
+
+Looking to contribute to QuantaJS itself rather than the documentation? See the [library's CONTRIBUTING.md](https://github.com/quanta-js/quanta/blob/master/CONTRIBUTING.md) and check the [core issue tracker](https://github.com/quanta-js/quanta/issues). The rest of this guide covers contributing to this documentation site.
 
 ## Getting Started
 
 <Stepper>
     <StepperItem title="Fork the Repository">
-        Fork the repository on [GitHub - QuantaJS](https://github.com/quanta-js/quanta)
-        </StepperItem>
-    <StepperItem title="Clone the Repository">
+        Fork [quanta-js/quanta-docs](https://github.com/quanta-js/quanta-docs) on GitHub.
+    </StepperItem>
+    <StepperItem title="Clone Your Fork">
         Clone your fork:
         ```bash
-        git clone https://github.com/<your-username>/quanta.git
+        git clone https://github.com/<your-username>/quanta-docs.git
+        cd quanta-docs
         ```
-        </StepperItem>
+    </StepperItem>
     <StepperItem title="Install Dependencies">
-        Install dependencies:
+        Use Node.js 22 or later, then install dependencies:
         ```bash
         npm install
         ```
-        </StepperItem>
-    <StepperItem title="Start Development Server">
-        Start the development server:
+    </StepperItem>
+    <StepperItem title="Start the Development Server">
         ```bash
         npm run dev
         ```
-        </StepperItem>  
-    <StepperItem title="Open in Browser">
-        Open [http://localhost:3000](http://localhost:3000) in your browser.
-        </StepperItem>
+    </StepperItem>
+    <StepperItem title="Open the Site">
+        Open [http://localhost:3000](http://localhost:3000).
+    </StepperItem>
 </Stepper>
+
+## Add or edit a documentation page
+
+Documentation pages live at:
+
+```text
+contents/docs/<section>/<page>/index.mdx
+```
+
+To add a new page:
+
+1. Create its `index.mdx` file with `title` and `description` frontmatter.
+2. Add the page to `lib/routes-config.ts` in the appropriate section.
+3. Run the development server and confirm the page appears in the sidebar.
+4. Run `npm run build` before opening the pull request.
+
+The sidebar order in `lib/routes-config.ts` also drives previous/next navigation.
+
+## MDX components
+
+The site registers reusable MDX components in `lib/markdown.ts`. Available components include:
+
+- `Note`
+- `Tabs`, `TabsList`, `TabsTrigger`, and `TabsContent`
+- `Stepper` and `StepperItem`
+- `Callout`
+- `Files`
+- `Outlet`
+
+Use the existing docs pages as examples when choosing a component.
+
+## Blog posts
+
+Blog posts live in `contents/blogs/` as `.mdx` files. Their frontmatter includes:
+
+- `title`
+- `description`
+- `date`
+- `authors`
+- `cover`
+
+Place referenced cover images under `public/` and keep the frontmatter path in sync with the asset.
 
 ## Submitting Changes
 
-- Open a pull request with a clear description of your changes.
-- Follow the Conventional Commits format for commit messages.
+- Open a pull request with a clear description of the change.
+- Follow the repository's Conventional Commit style.
+- Run `npm run build` for documentation or site changes.
+
+## Find a first issue
+
+- [QuantaJS docs good first issues](https://github.com/quanta-js/quanta-docs/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22good%20first%20issue%22)
+- [QuantaJS core good first issues](https://github.com/quanta-js/quanta/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22good%20first%20issue%22)
 
 ## Reporting Issues
 
-- File bugs or suggestions on the [GitHub Issues](https://github.com/quanta-js/quanta/issues/new) page.
+- **Library bugs or core features**: File an issue in the [quanta issue tracker](https://github.com/quanta-js/quanta/issues).
+- **Documentation or site issues**: File an issue in the [quanta-docs issue tracker](https://github.com/quanta-js/quanta-docs/issues).
 
 ## License
 
