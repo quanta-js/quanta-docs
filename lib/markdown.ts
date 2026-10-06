@@ -91,7 +91,7 @@ export async function getDocsForSlug(slug: string) {
     try {
         const contentPath = getDocsContentPath(slug);
         if (!contentPath) return undefined;
-        const rawMdx = await fs.readFile(contentPath, "utf-8");
+        const rawMdx = await fs.readFile(/*turbopackIgnore: true*/ contentPath, "utf-8");
         return await parseMdx<BaseMdxFrontmatter>(rawMdx);
     } catch (err) {
         console.log(err);
@@ -101,7 +101,7 @@ export async function getDocsForSlug(slug: string) {
 export async function getDocsTocs(slug: string) {
     const contentPath = getDocsContentPath(slug);
     if (!contentPath) return [];
-    const rawMdx = await fs.readFile(contentPath, "utf-8");
+    const rawMdx = await fs.readFile(/*turbopackIgnore: true*/ contentPath, "utf-8");
     // captures between ## - #### can modify accordingly
     const headingsRegex = /^(#{2,4})\s(.+)$/gm;
     let match;
@@ -191,7 +191,7 @@ export async function getAllChilds(pathString: string) {
                     `Route "${prevHref}${it.href}" resolves outside contents/`
                 );
             }
-            const raw = await fs.readFile(totalPath, "utf-8");
+            const raw = await fs.readFile(/*turbopackIgnore: true*/ totalPath, "utf-8");
             return {
                 ...justGetFrontmatterFromMD<BaseMdxFrontmatter>(raw),
                 href: `/docs${prevHref}${it.href}`,
@@ -269,7 +269,7 @@ export async function getBlogForSlug(slug: string) {
     const blogFile = resolveContentPath("blogs", `${slug}.mdx`);
     if (!blogFile) return undefined;
     try {
-        const rawMdx = await fs.readFile(blogFile, "utf-8");
+        const rawMdx = await fs.readFile(/*turbopackIgnore: true*/ blogFile, "utf-8");
         return await parseMdx<BlogMdxFrontmatter>(rawMdx);
     } catch {
         return undefined;
@@ -330,7 +330,7 @@ export async function getDocFrontmatter(path: string) {
     try {
         const contentPath = getDocsContentPath(path);
         if (!contentPath) return undefined;
-        const rawMdx = await fs.readFile(contentPath, "utf-8");
+        const rawMdx = await fs.readFile(/*turbopackIgnore: true*/ contentPath, "utf-8");
         return justGetFrontmatterFromMD<BlogMdxFrontmatter>(rawMdx);
     } catch {
         return undefined;

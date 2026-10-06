@@ -70,6 +70,7 @@ export const ROUTES: EachRoute[] = [
         href: "/best-practices",
         noLink: true,
         items: [
+            { title: "Persistence", href: "/persistence" },
             { title: "Tips and Examples", href: "/tips-and-examples" },
             { title: "Examples", href: "/examples" },
             { title: "Persistence Examples", href: "/examples/persistence", tag: "New!" },
