@@ -63,9 +63,11 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
+    globals: true,
     environment: 'jsdom',
   },
 });
+
 ```
 
 ## Test isolation
@@ -214,6 +216,7 @@ Do not use browser storage in a unit test. A tiny in-memory adapter is
 deterministic and implements the same persistence contract.
 
 ```ts
+import { expect, test } from 'vitest';
 import {
   createContainer,
   defineStore,
@@ -251,6 +254,7 @@ test('persisted state can be saved and restored', async () => {
 
   const first = createContainer();
   const source = useSettingsStore(first);
+  await source.$hydrated;
   source.dark();
   // $persist is available because persist is configured on this store
   await source.$persist?.save();
@@ -268,6 +272,7 @@ test('persisted state can be saved and restored', async () => {
 });
 ```
 
+
 Use `await store.$hydrated` when the test should exercise the store's normal
 initial rehydration path instead of calling `load()` explicitly.
 
@@ -277,8 +282,10 @@ Pass a test-owned container to `<QuantaProvider>`. Hooks inside the component
 then resolve the same isolated stores your test can inspect directly.
 
 ```tsx
+import { expect, test } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+
 import { createContainer, defineStore } from '@quantajs/core';
 import { QuantaProvider, useQuanta, useQuantaActions } from '@quantajs/react';
 
